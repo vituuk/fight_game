@@ -560,6 +560,17 @@ const keys = {
 };
 
 // ─── Enemy AI ─────────────────────────────────────────────────────────────────
+// refreshAI() decides who controls the enemy slot at any given moment.
+function refreshAI() {
+  const friendsConnected = Object.keys(remotePlayers).length > 0;
+  if (network.role === NetworkRole.OFFLINE) {
+    enemy.isAI = true;        // Solo mode: always AI
+  } else if (network.role === NetworkRole.HOST) {
+    enemy.isAI = !friendsConnected; // Host: AI only when lobby is empty
+  } else {
+    enemy.isAI = false;       // Client: Host always controls the enemy
+  }
+}
 enemy.isAI = true;
 
 const AI = {
@@ -771,8 +782,8 @@ function resetRound(omitPlayerPos = false) {
   aiState    = AI.APPROACH;
   aiTimer    = 0;
   aiCooldown = 0;
-  // In Co-Op, Only the Host or Offline player runs the Boss AI!
-  enemy.isAI = (network.role !== NetworkRole.CLIENT);
+  // HOST only fights AI when lobby is empty. Friends take over the enemy slot.
+  refreshAI();
 
   // --- Timer ---
   countdown = 60;
@@ -904,12 +915,12 @@ function animate() {
   }
 
   // AI & Physics
+  refreshAI(); // Re-evaluate every frame so it reacts to friends joining/leaving
   if (gameActive) {
-    if (network.role !== NetworkRole.CLIENT) {
-      // Host or Offline controls the AI algorithm
+    if (enemy.isAI) {
       tickEnemyAI();
-    } else {
-      enemy.velocity.x = 0; // Clients strictly obey the Host's broadcasted enemy position
+    } else if (network.role === NetworkRole.CLIENT) {
+      enemy.velocity.x = 0; // Clients obey Host's broadcasted enemy position
     }
   } else {
     enemy.velocity.x = 0;
@@ -1225,6 +1236,9 @@ function setupLobby() {
     if (remotePlayers[peerId]) {
         console.log(`Player ${peerId} left the arena.`);
         delete remotePlayers[peerId];
+        // Also clean up HOST slot if it was the host who disconnected
+        if (remotePlayers['HOST']) delete remotePlayers['HOST'];
+        refreshAI(); // Reactivate AI if the last friend left
     } else {
         alert("Host disconnected!");
         window.location.href = '/';
