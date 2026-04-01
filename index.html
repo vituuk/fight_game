@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="2D Browser Fighting Game - Battle the AI with punches, kicks, and special moves!" />
+    <title>Fighting Game</title>
+    <link rel="stylesheet" href="/src/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="game-container">
+      
+      <!-- LAYER 1.5: Hero Selection -->
+      <div id="hero-selection" class="hero-selection">
+        <span class="hero-label">HERO:</span>
+        <div class="hero-options">
+          <img src="/assets/characters/p1.png" class="hero-btn active" data-src="/assets/characters/p1.png" data-name="DEFAULT" title="Default Fighter">
+          <img src="/assets/hero/dd-removebg-preview.png" class="hero-btn" data-src="/assets/hero/dd-removebg-preview.png" data-name="DD" title="DD">
+          <img src="/assets/hero/haratu.png" class="hero-btn" data-src="/assets/hero/haratu.png" data-name="HARATU" title="Haratu">
+          <img src="/assets/hero/lufy.png" class="hero-btn" data-src="/assets/hero/lufy.png" data-name="LUFFY" title="Luffy">
+        </div>
+      </div>
+
+      <!-- LAYER 1: Canvas (bottom) -->
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- LAYER 2: HUD - health bars & timer (above canvas, no pointer events) -->
+      <div id="ui-layer">
+        <div class="health-container p1-health">
+          <div class="player-name">Player 1</div>
+          <div class="health-bar-bg">
+            <div id="player1Health" class="health-bar-fill"></div>
+          </div>
+        </div>
+
+        <div id="timer">60</div>
+
+        <div class="health-container p2-health">
+          <div class="player-name">Enemy AI</div>
+          <div class="health-bar-bg flex-end">
+            <div id="player2Health" class="health-bar-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYER 3: Result overlay -->
+      <div id="displayText" style="display:none;">Tie</div>
+
+      <!-- LAYER 4: Stage transition cinematic -->
+      <div id="stage-overlay" class="stage-overlay hidden">
+        <div class="stage-curtain top"></div>
+        <div class="stage-curtain bottom"></div>
+        <div class="stage-info">
+          <div id="stage-number" class="stage-number">STAGE 1</div>
+          <div id="stage-vs" class="stage-vs">VS</div>
+          <div id="stage-enemy-name" class="stage-enemy-name">SAMURAI</div>
+        </div>
+      </div>
+
+      <!-- LAYER 5: Game Over / Victory screen -->
+      <div id="game-over-screen" class="game-over-screen hidden">
+        <div class="game-over-content">
+          <div id="game-over-title" class="game-over-title">GAME OVER</div>
+          <div id="game-over-sub" class="game-over-sub">You were defeated...</div>
+          <button id="btn-retry" class="retry-btn">▶ RETRY</button>
+        </div>
+      </div>
+
+      <!-- LAYER 5.5: Multiplayer Lobby -->
+      <div id="lobby-screen" class="game-over-screen">
+        <div class="game-over-content">
+          <div id="lobby-title" class="game-over-title">ONLINE ARENA</div>
+          <div id="lobby-sub" class="game-over-sub" style="margin-bottom: 20px;">Connecting to WebRTC...</div>
+          
+          <div id="lobby-host-ui" style="display: none; width: 100%;">
+            <p style="font-size: 10px; color: #aaa; margin-bottom: 8px;">Share this link to invite a friend:</p>
+            <input type="text" id="invite-link-input" readonly style="width: 100%; padding: 8px; font-family: monospace; font-size: 10px; background: #222; color: #fff; border: 1px solid #fbc531; border-radius: 4px; margin-bottom: 12px; text-align: center;">
+            <button id="btn-copy" class="retry-btn" style="background: #e1b12c;">📋 COPY LINK</button>
+            <button id="btn-play-offline" class="retry-btn" style="margin-top: 10px; background: #666; width:auto; font-size:10px;">Play Singleplayer Offline</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYER 6: Controls (top, pointer-events enabled on buttons only) -->
+      <div id="controls-overlay">
+
+        <!-- LEFT: D-Pad -->
+        <div class="dpad-wrap">
+          <button id="btn-up"    class="dpad-btn dpad-up">↑</button>
+          <div class="dpad-row">
+            <button id="btn-left"  class="dpad-btn dpad-left">←</button>
+            <div class="dpad-center"></div>
+            <button id="btn-right" class="dpad-btn dpad-right">→</button>
+          </div>
+        </div>
+
+        <!-- RIGHT: Action buttons with weapon names -->
+        <div class="action-wrap">
+          <!-- Top row -->
+          <div class="action-row">
+            <button id="btn-kick"    class="action-btn btn-kick"    title="Sword Strike (K)">
+              <span class="btn-icon">⚔️</span>
+              <span class="btn-label">Sword</span>
+            </button>
+            <button id="btn-shield"  class="action-btn btn-shield"  title="Shield (S)">
+              <span class="btn-icon">🛡️</span>
+              <span class="btn-label">Shield</span>
+            </button>
+          </div>
+          <!-- Bottom row -->
+          <div class="action-row">
+            <button id="btn-special" class="action-btn btn-special" title="Skill (Q)">
+              <span class="btn-icon">✨</span>
+              <span class="btn-label">Skill</span>
+            </button>
+            <button id="btn-attack"  class="action-btn btn-attack"  title="Attack (Space)">
+              <span class="btn-icon">👊</span>
+              <span class="btn-label">Attack</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- controls guide -->
+    <div id="keyboard-guide">
+      <span>⌨️ <b>WASD</b> Move/Jump&nbsp;&nbsp;|&nbsp;&nbsp;<b>Space</b> Attack&nbsp;&nbsp;|&nbsp;&nbsp;<b>K</b> Sword Strike&nbsp;&nbsp;|&nbsp;&nbsp;<b>Q</b> Skill&nbsp;&nbsp;|&nbsp;&nbsp;<b>S (hold)</b> Shield</span>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
