@@ -1129,6 +1129,7 @@ const uiLayer     = document.getElementById('ui-layer');
 function setupLobby() {
   uiLayer.style.display = 'none';
   lobbyScreen.classList.remove('hidden');
+  lobbyScreen.classList.add('visible');
 
   network.onReady = (id) => {
     if (joinId) {
