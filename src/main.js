@@ -120,6 +120,23 @@ function createHitSparks(x, y) {
     friction: 0.85,
     life:     0.55,
   });
+
+  // Blood Splatter
+  for (let i = 0; i < 15; i++) {
+    const spd = 3 + Math.random() * 8;
+    const angle = Math.random() * Math.PI * 2;
+    emit({
+      position: { x, y },
+      velocity: { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd - 3 },
+      radius:   2 + Math.random() * 4,
+      color:    '#d63031', // Deep blood red
+      glow:     '#b71540',
+      tail:     true,      // Stretches as it falls
+      gravity:  0.8,       // Heavy gravity so it splashes toward the floor quickly
+      friction: 0.98,
+      life:     0.8,
+    });
+  }
 }
 
 /** Sword attack sparks – silver-blue metallic streaks + sparks */
@@ -532,6 +549,8 @@ enemy.attackBox.height = ATTACK_H;
 
 
 
+export const remotePlayers = {};
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 const keys = {
   a: { pressed: false },
@@ -894,71 +913,64 @@ function animate() {
     enemy.velocity.x = 0;
   }
 
-  player.update();
-  enemy.update();
+  const allFighters = [player, enemy, ...Object.values(remotePlayers)];
+  allFighters.forEach(p => p.update());
+  allFighters.forEach(p => emitSkillAmbient(p));
 
-  emitSkillAmbient(player);
-  emitSkillAmbient(enemy);
+  // Render floating Nametags and HP Bars for all generic remote players
+  allFighters.forEach(p => {
+    if (p !== player && p !== enemy && !p.isDead) {
+      const barW = 50, barH = 5;
+      const hpRatio = Math.max(0, p.health / 100);
+      const fx = p.position.x + p.width / 2 - barW / 2;
+      const fy = p.position.y - 15;
+      ctx.fillStyle = '#000'; ctx.fillRect(fx, fy, barW, barH);
+      ctx.fillStyle = p.health > 40 ? '#2ecc71' : '#e74c3c';
+      ctx.fillRect(fx, fy, barW * hpRatio, barH);
+      ctx.strokeStyle = '#fff'; ctx.strokeRect(fx, fy, barW, barH);
+      ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign='center';
+      ctx.fillText(p.name || 'Guest', p.position.x + p.width/2, fy - 6);
+    }
+  });
 
-  // Collision
+  // Collision Setup for N-Players!
   if (gameActive) {
-    // Player -> Enemy
-    if (!enemy.isDead && rectangularCollision({ rectangle1: player, rectangle2: enemy })) {
-      const hx = enemy.position.x + CHAR_W / 2;
-      const hy = enemy.position.y + CHAR_H * 0.4;
-      if (player.isAttacking) {
-        player.isAttacking = false;
-        enemy.takeHit(10);
-        createHitSparks(hx, hy);
-        if (enemy.isShielding) createShieldSparks(hx, hy);
-        else createSwordSparks(hx, hy, player.facingRight);
-        game.p2HealthBar.style.width = enemy.health + '%';
-      } else if (player.isKnifeAttacking) {
-        player.isKnifeAttacking = false;
-        enemy.takeHit(15);
-        createHitSparks(hx, hy);
-        if (enemy.isShielding) createShieldSparks(hx, hy);
-        else createSlashSparks(hx, hy, player.facingRight);
-        game.p2HealthBar.style.width = enemy.health + '%';
-      } else if (player.isSpecialAttacking) {
-        player.isSpecialAttacking = false;
-        enemy.takeHit(25);
-        createHitSparks(hx, hy);
-        if (enemy.isShielding) createShieldSparks(hx, hy);
-        else createSkillSparks(hx, hy);
-        game.p2HealthBar.style.width = enemy.health + '%';
+    for (let attacker of allFighters) {
+      if (attacker.isDead || (!attacker.isAttacking && !attacker.isKnifeAttacking && !attacker.isSpecialAttacking)) continue;
+      
+      for (let victim of allFighters) {
+        if (attacker === victim || victim.isDead) continue;
+        
+        if (rectangularCollision({ rectangle1: attacker, rectangle2: victim })) {
+          const hx = victim.position.x + CHAR_W / 2;
+          const hy = victim.position.y + CHAR_H * 0.4;
+          
+          let dmg = 0;
+          if (attacker.isAttacking) dmg = 10;
+          else if (attacker.isKnifeAttacking) dmg = 15;
+          else if (attacker.isSpecialAttacking) dmg = 25;
+          
+          if (dmg > 0) {
+            attacker.isAttacking = false;
+            attacker.isKnifeAttacking = false;
+            attacker.isSpecialAttacking = false;
+
+            victim.takeHit(dmg);
+            createHitSparks(hx, hy);
+            if (victim.isShielding) createShieldSparks(hx, hy);
+            else if (dmg === 10) createSwordSparks(hx, hy, attacker.facingRight);
+            else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
+            else if (dmg === 25) createSkillSparks(hx, hy);
+            
+            // Only update native top HUD if it's the main player or main enemy
+            if (victim === player) game.p1HealthBar.style.width = player.health + '%';
+            if (victim === enemy) game.p2HealthBar.style.width = enemy.health + '%';
+          }
+        }
       }
     }
 
-    // Enemy -> Player
-    if (!player.isDead && rectangularCollision({ rectangle1: enemy, rectangle2: player })) {
-      const hx = player.position.x + CHAR_W / 2;
-      const hy = player.position.y + CHAR_H * 0.4;
-      if (enemy.isAttacking) {
-        enemy.isAttacking = false;
-        player.takeHit(10);
-        createHitSparks(hx, hy);
-        if (player.isShielding) createShieldSparks(hx, hy);
-        else createSwordSparks(hx, hy, enemy.facingRight);
-        game.p1HealthBar.style.width = player.health + '%';
-      } else if (enemy.isKnifeAttacking) {
-        enemy.isKnifeAttacking = false;
-        player.takeHit(15);
-        createHitSparks(hx, hy);
-        if (player.isShielding) createShieldSparks(hx, hy);
-        else createSlashSparks(hx, hy, enemy.facingRight);
-        game.p1HealthBar.style.width = player.health + '%';
-      } else if (enemy.isSpecialAttacking) {
-        enemy.isSpecialAttacking = false;
-        player.takeHit(25);
-        createHitSparks(hx, hy);
-        if (player.isShielding) createShieldSparks(hx, hy);
-        else createSkillSparks(hx, hy);
-        game.p1HealthBar.style.width = player.health + '%';
-      }
-    }
-
-    // Win condition
+    // Win condition - N-Player sandbox rules: keep playing until reset!
     if (enemy.health <= 0 || player.health <= 0) {
       gameActive = false;
       determineWinner({
@@ -971,25 +983,53 @@ function animate() {
 
   // ── Network Broadcast ────────────────────────────────────────────────────
   if (network.role !== NetworkRole.OFFLINE) {
-    network.send({
-      x: player.position.x,
-      y: player.position.y,
-      vx: player.velocity.x,
-      vy: player.velocity.y,
-      hp: player.health,
-      fr: player.facingRight,
-      st: player._state,
-      atk: player.isAttacking,
-      katk: player.isKnifeAttacking,
-      satk: player.isSpecialAttacking,
-      shld: player.isShielding,
-      w: player.width,
-      src: player.img.src
-    });
-    // Force health bars to stay visually synced with the network payload
+    if (network.role === NetworkRole.CLIENT) {
+      // Just send my own state up to Host
+      network.send({
+        type: 'client_state',
+        data: getPlayerData(player)
+      });
+    } else if (network.role === NetworkRole.HOST) {
+       // Host broadcasts entire universal game state
+       const payload = {
+           host: getPlayerData(player),
+           clients: {}
+       };
+       Object.keys(remotePlayers).forEach(id => {
+           payload.clients[id] = getPlayerData(remotePlayers[id]);
+       });
+       network.send({ type: 'host_sync', data: payload });
+    }
+
+    // Force native health bars to sync
     game.p1HealthBar.style.width = player.health + '%';
     game.p2HealthBar.style.width = enemy.health + '%';
   }
+}
+
+// Network state packers
+function getPlayerData(p) {
+  return {
+    x: p.position.x, y: p.position.y,
+    vx: p.velocity.x, vy: p.velocity.y,
+    hp: p.health, fr: p.facingRight, st: p._state,
+    atk: p.isAttacking, katk: p.isKnifeAttacking,
+    satk: p.isSpecialAttacking, shld: p.isShielding,
+    w: p.width, src: p.img ? p.img.src : ''
+  };
+}
+
+function applyPlayerData(p, d) {
+    p.position.x = d.x; p.position.y = d.y;
+    p.velocity.x = d.vx; p.velocity.y = d.vy;
+    p.health = d.hp; p.facingRight = d.fr; p._state = d.st;
+    if (d.atk && !p.isAttacking) p.attack();
+    if (d.katk && !p.isKnifeAttacking) p.knifeAttack();
+    if (d.satk && !p.isSpecialAttacking) p.specialAttack();
+    if (d.shld) p.shield(); else p.stopShield();
+    if (d.src && (!p.img || !p.img.src.includes(d.src.split('/').pop()))) {
+      const img = new Image(); img.src = d.src; p.img = img;
+    }
 }
 
 // ─── Keyboard & Buttons ──────────────────────────────────────────────────────
@@ -1091,7 +1131,17 @@ function setupLobby() {
   lobbyScreen.classList.remove('hidden');
 
   network.onReady = (id) => {
-    if (!joinId) {
+    if (joinId) {
+      lobbySub.textContent = "Connecting to Host...";
+      // Fallback: If connection takes longer than 6s, force offline mode
+      setTimeout(() => {
+        if (!network.hostConn || network.hostConn.open !== true) {
+          lobbySub.style.color = '#ff4757';
+          lobbySub.textContent = "Connection failed. Starting Offline Mode...";
+          setTimeout(() => btnOffline.click(), 1000);
+        }
+      }, 6000);
+    } else {
       lobbySub.textContent = "Waiting for challenger...";
       lobbyHostUi.style.display = 'block';
       inviteInput.value = network.getInviteLink(id);
@@ -1104,32 +1154,54 @@ function setupLobby() {
     resetRound();
   };
 
-  network.onData = (data) => {
-    enemy.position.x  = data.x;
-    enemy.position.y  = data.y;
-    enemy.velocity.x  = data.vx;
-    enemy.velocity.y  = data.vy;
-    enemy.health      = data.hp;
-    enemy.facingRight = data.fr;
-    enemy._state      = data.st;
-    
-    if (data.atk && !enemy.isAttacking) enemy.attack();
-    if (data.katk && !enemy.isKnifeAttacking) enemy.knifeAttack();
-    if (data.satk && !enemy.isSpecialAttacking) enemy.specialAttack();
-    
-    if (data.shld) enemy.shield();
-    else enemy.stopShield();
-
-    if (enemy.img && !enemy.img.src.includes(data.src.split('/').pop())) {
-      const img = new Image();
-      img.src = data.src;
-      enemy.img = img;
+  network.onData = (peerId, payload) => {
+    if (network.role === NetworkRole.HOST && payload.type === 'client_state') {
+       if (!remotePlayers[peerId]) {
+           remotePlayers[peerId] = new Player(game, {
+               position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
+               name: 'Fighter ' + peerId.substring(0,4), facingRight: false,
+               offset: { x: -ATTACK_W, y: 70 },
+               spriteSrc: '/assets/characters/anamy.png', swordSrc: '/assets/characters/sword1.png',
+               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+               accentColor: '#fbc531', isEnemy: true
+           });
+           remotePlayers[peerId].width = CHAR_W; remotePlayers[peerId].height = CHAR_H;
+           remotePlayers[peerId].attackBox.width = ATTACK_W; remotePlayers[peerId].attackBox.height = ATTACK_H;
+       }
+       applyPlayerData(remotePlayers[peerId], payload.data);
+    } 
+    else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
+       const d = payload.data;
+       // Map host directly to our "enemy" slot so the native health bar tracks them!
+       applyPlayerData(enemy, d.host);
+       
+       Object.keys(d.clients).forEach(clientId => {
+           if (clientId === network.peer.id) return; // Ignore my own data bouncing back
+           if (!remotePlayers[clientId]) {
+               remotePlayers[clientId] = new Player(game, {
+                   position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
+                   name: 'Fighter ' + clientId.substring(0,4), facingRight: false,
+                   offset: { x: -ATTACK_W, y: 70 },
+                   spriteSrc: '/assets/characters/anamy.png', swordSrc: '/assets/characters/sword1.png',
+                   shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+                   accentColor: '#fbc531', isEnemy: true
+               });
+               remotePlayers[clientId].width = CHAR_W; remotePlayers[clientId].height = CHAR_H;
+               remotePlayers[clientId].attackBox.width = ATTACK_W; remotePlayers[clientId].attackBox.height = ATTACK_H;
+           }
+           applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
+       });
     }
   };
 
-  network.onDisconnect = () => {
-    alert("Opponent disconnected!");
-    window.location.href = '/';
+  network.onDisconnect = (peerId) => {
+    if (remotePlayers[peerId]) {
+        console.log(`Player ${peerId} left the arena.`);
+        delete remotePlayers[peerId];
+    } else {
+        alert("Host disconnected!");
+        window.location.href = '/';
+    }
   };
 
   network.init(joinId);
