@@ -771,7 +771,8 @@ function resetRound(omitPlayerPos = false) {
   aiState    = AI.APPROACH;
   aiTimer    = 0;
   aiCooldown = 0;
-  enemy.isAI = (network.role === NetworkRole.OFFLINE);
+  // In Co-Op, Only the Host or Offline player runs the Boss AI!
+  enemy.isAI = (network.role !== NetworkRole.CLIENT);
 
   // --- Timer ---
   countdown = 60;
@@ -904,10 +905,11 @@ function animate() {
 
   // AI & Physics
   if (gameActive) {
-    if (network.role === NetworkRole.OFFLINE) {
+    if (network.role !== NetworkRole.CLIENT) {
+      // Host or Offline controls the AI algorithm
       tickEnemyAI();
     } else {
-      enemy.velocity.x = 0; // Network strictly overrides movement
+      enemy.velocity.x = 0; // Clients strictly obey the Host's broadcasted enemy position
     }
   } else {
     enemy.velocity.x = 0;
@@ -990,9 +992,11 @@ function animate() {
         data: getPlayerData(player)
       });
     } else if (network.role === NetworkRole.HOST) {
-       // Host broadcasts entire universal game state
+       // Host broadcasts entire universal game state, INCLUDING the AI Boss!
        const payload = {
            host: getPlayerData(player),
+           enemy: getPlayerData(enemy), // AI Boss 
+           stageIdx: currentStageIdx,   // For stage syncing
            clients: {}
        };
        Object.keys(remotePlayers).forEach(id => {
@@ -1162,9 +1166,9 @@ function setupLobby() {
                position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
                name: 'Fighter ' + peerId.substring(0,4), facingRight: false,
                offset: { x: -ATTACK_W, y: 70 },
-               spriteSrc: '/assets/characters/anamy.png', swordSrc: '/assets/characters/sword1.png',
+               spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
                shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-               accentColor: '#fbc531', isEnemy: true
+               accentColor: '#3498db', isEnemy: false
            });
            remotePlayers[peerId].width = CHAR_W; remotePlayers[peerId].height = CHAR_H;
            remotePlayers[peerId].attackBox.width = ATTACK_W; remotePlayers[peerId].attackBox.height = ATTACK_H;
@@ -1173,9 +1177,31 @@ function setupLobby() {
     } 
     else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
        const d = payload.data;
-       // Map host directly to our "enemy" slot so the native health bar tracks them!
-       applyPlayerData(enemy, d.host);
        
+       // Sync Stage Index if Host triggers a stage transition
+       if (d.stageIdx !== undefined && d.stageIdx !== currentStageIdx && !isTransitioning) {
+           goToStage(d.stageIdx);
+       }
+
+       // Map the Host's AI Enemy perfectly to our local enemy so we can fight the Boss together!
+       if (d.enemy) applyPlayerData(enemy, d.enemy);
+       
+       // Create a generic RemotePlayer slot for the actual Host character
+       if (!remotePlayers['HOST']) {
+           remotePlayers['HOST'] = new Player(game, {
+               position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
+               name: 'Host Player', facingRight: false,
+               offset: { x: -ATTACK_W, y: 70 },
+               spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
+               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+               accentColor: '#e74c3c', isEnemy: false
+           });
+           remotePlayers['HOST'].width = CHAR_W; remotePlayers['HOST'].height = CHAR_H;
+           remotePlayers['HOST'].attackBox.width = ATTACK_W; remotePlayers['HOST'].attackBox.height = ATTACK_H;
+       }
+       applyPlayerData(remotePlayers['HOST'], d.host);
+
+       // Handle all other friends in the Lobby
        Object.keys(d.clients).forEach(clientId => {
            if (clientId === network.peer.id) return; // Ignore my own data bouncing back
            if (!remotePlayers[clientId]) {
@@ -1183,9 +1209,9 @@ function setupLobby() {
                    position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
                    name: 'Fighter ' + clientId.substring(0,4), facingRight: false,
                    offset: { x: -ATTACK_W, y: 70 },
-                   spriteSrc: '/assets/characters/anamy.png', swordSrc: '/assets/characters/sword1.png',
+                   spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
                    shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-                   accentColor: '#fbc531', isEnemy: true
+                   accentColor: '#3498db', isEnemy: false
                });
                remotePlayers[clientId].width = CHAR_W; remotePlayers[clientId].height = CHAR_H;
                remotePlayers[clientId].attackBox.width = ATTACK_W; remotePlayers[clientId].attackBox.height = ATTACK_H;
