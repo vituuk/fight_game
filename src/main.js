@@ -1219,45 +1219,6 @@ function setupLobby() {
 
   network.onData = (peerId, payload) => {
     if (network.role === NetworkRole.HOST && payload.type === 'client_state') {
-       const clientData = payload.data;
-       
-       // If this is our FIRST friend, they become the 'enemy' (Big HUD)
-       const clientIds = Object.keys(network.clients);
-       if (peerId === clientIds[0]) {
-           applyPlayerData(enemy, clientData, true); // skipHp: HOST owns enemy.health
-           enemy.name = clientData.name || ('Fighter ' + peerId.substring(0,4));
-           enemy.isAI = false;
-           // p2 HUD shows host's health (from their broadcast)
-           game.p2HealthBar.style.width = enemy.health + '%';
-           // Ensure big HUD shows their name
-           const p2Name = document.querySelector('.p2-health .player-name');
-           if (p2Name) p2Name.textContent = enemy.name;
-       } else {
-           // Additional friends become Guests
-           if (!remotePlayers[peerId]) {
-               remotePlayers[peerId] = new Player(game, {
-                   position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
-                   name: clientData.name || ('Fighter ' + peerId.substring(0,4)), 
-                   facingRight: false,
-                   offset: { x: -ATTACK_W, y: 70 },
-                   spriteSrc: clientData.src || '/assets/characters/p1.png', 
-                   swordSrc: '/assets/characters/sword2.png',
-                   shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-                   accentColor: '#3498db', isEnemy: false
-               });
-           }
-           applyPlayerData(remotePlayers[peerId], clientData);
-       }
-    } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
-       const d = payload.data;
-       // HOST syncs position + animation flags for our opponent view
-       applyPlayerData(enemy, d.host); // enemy.health set to host's health (their self-reported HP)
-       enemy.name = d.host.name || 'Host Player';
-       enemy.isAI = false;
-       enemy.isHidden = false;
-       const p2HealthEl2 = document.querySelector('.p2-health');
-       if (p2HealthEl2) p2HealthEl2.style.visibility = 'visible';
-       const p2Name = document.querySelector('.p2-health .player-name');
        if (p2Name) p2Name.textContent = enemy.name;
        game.p2HealthBar.style.width = enemy.health + '%';
 
