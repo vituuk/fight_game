@@ -561,26 +561,33 @@ const keys = {
 
 // ─── Enemy AI ─────────────────────────────────────────────────────────────────
 // refreshAI() decides who controls the enemy slot at any given moment.
+// If joinId is present in URL, we are ALWAYS going to be a CLIENT — hide AI immediately.
+const _isOnlineClient = !!new URLSearchParams(window.location.search).get('join');
+
 function refreshAI() {
   const friendsConnected = Object.keys(remotePlayers).length > 0;
   const p2HealthEl = document.querySelector('.p2-health');
 
-  if (network.role === NetworkRole.OFFLINE) {
+  if (_isOnlineClient) {
+    // CLIENT: host controls the enemy slot. NEVER run local AI.
+    enemy.isAI = false;
+    enemy.isHidden = false; // Host's avatar is always visible once connected
+  } else if (network.role === NetworkRole.OFFLINE) {
     enemy.isAI = true;        // Solo mode: always AI
     enemy.isHidden = false;
   } else if (network.role === NetworkRole.HOST) {
     // Online Host mode: prevent AI from taking over the slot, hide until friend joins
-    enemy.isAI = false; 
+    enemy.isAI = false;
     enemy.isHidden = !friendsConnected;
   } else {
-    enemy.isAI = false;       // Client: Host always controls the enemy
+    enemy.isAI = false;
     enemy.isHidden = false;
   }
 
   if (p2HealthEl) p2HealthEl.style.visibility = enemy.isHidden ? 'hidden' : 'visible';
 }
 enemy.isAI = true;
-enemy.isHidden = false;
+enemy.isHidden = _isOnlineClient; // Hide immediately if joining online
 
 const AI = {
   APPROACH:  'approach',
@@ -999,13 +1006,25 @@ function animate() {
       }
     }
 
-    // Win condition - N-Player sandbox rules: keep playing until reset!
-    // Win condition 
-    if (enemy.health <= 0 || player.health <= 0) {
-      // In Multiplayer, we just reset the round in the SAME arena for 1v1 focus
+    // Win condition
+    // HOST is the authority: decides who won and broadcasts outcome to clients.
+    if (!enemy.isHidden && (enemy.health <= 0 || player.health <= 0)) {
       if (network.role !== NetworkRole.OFFLINE) {
+        // Determine winner on HOST side
+        const hostWon  = enemy.health <= 0;  // enemy = friend (client), so host won if enemy is dead
+        const clientWon = player.health <= 0; // host is dead, client won
         gameActive = false;
-        setTimeout(() => resetRound(false), 2000);
+        // Tell clients the round result
+        if (network.role === NetworkRole.HOST) {
+          network.send({ type: 'round_result', winner: hostWon ? 'host' : 'client' });
+        }
+        // Show result text briefly, then reset
+        game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
+        game.displayText.style.display = 'block';
+        setTimeout(() => {
+          game.displayText.style.display = 'none';
+          resetRound(false);
+        }, 2000);
       } else {
         gameActive = false;
         determineWinner({
@@ -1270,6 +1289,17 @@ function setupLobby() {
            }
            applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
        });
+    }
+    // HOST broadcasts round outcome to clients so they see win/lose correctly
+    else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
+      gameActive = false;
+      const iWon = payload.winner === 'client'; // CLIENT won if host says 'client'
+      game.displayText.textContent = iWon ? 'You Win! 🏆' : 'You Lose...';
+      game.displayText.style.display = 'block';
+      setTimeout(() => {
+        game.displayText.style.display = 'none';
+        resetRound(false);
+      }, 2000);
     }
   };
 
