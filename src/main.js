@@ -551,6 +551,13 @@ enemy.attackBox.height = ATTACK_H;
 
 export const remotePlayers = {};
 
+// Spawn positions for up to 10 players (HOST=slot0, clients=slot1..9)
+const SPAWN_XS     = [80,  760, 420, 200, 600, 310, 520, 160, 660, 360];
+const BRAWL_COLORS = ['#4fc3f7','#ff6b6b','#51cf66','#ffd43b','#cc5de8',
+                      '#ff922b','#20c997','#94d82d','#f06595','#74c0fc'];
+let _clientJoinOrder = {}; // peerId -> join index (0 = host)
+
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 const keys = {
   a: { pressed: false },
@@ -565,33 +572,22 @@ const keys = {
 const _isOnlineClient = !!new URLSearchParams(window.location.search).get('join');
 
 function refreshAI() {
-  // HOST: count real peer connections from network.clients (first client goes to enemy slot, not remotePlayers)
-  const friendsConnected = _isOnlineClient
-    ? true  // CLIENT always treats host as connected once in game
-    : (Object.keys(network.clients || {}).length > 0);
-
+  const isOnline = network.role !== NetworkRole.OFFLINE;
   const p2HealthEl = document.querySelector('.p2-health');
 
-  if (_isOnlineClient) {
-    // CLIENT: host controls the enemy slot. NEVER run local AI.
-    enemy.isAI = false;
+  if (!isOnline) {
+    enemy.isAI = true;
     enemy.isHidden = false;
-  } else if (network.role === NetworkRole.OFFLINE) {
-    enemy.isAI = true;        // Solo mode: always AI
-    enemy.isHidden = false;
-  } else if (network.role === NetworkRole.HOST) {
-    // Online Host: hide enemy slot only until first friend connects
-    enemy.isAI = false;
-    enemy.isHidden = !friendsConnected;
   } else {
+    // Online: no AI, no special enemy slot — use remotePlayers for everyone
     enemy.isAI = false;
-    enemy.isHidden = false;
+    enemy.isHidden = true;
   }
-
   if (p2HealthEl) p2HealthEl.style.visibility = enemy.isHidden ? 'hidden' : 'visible';
 }
 enemy.isAI = true;
-enemy.isHidden = _isOnlineClient; // CLIENT: hide until first host_sync arrives
+enemy.isHidden = _isOnlineClient;
+
 
 const AI = {
   APPROACH:  'approach',
@@ -950,28 +946,36 @@ function animate() {
     enemy.velocity.x = 0;
   }
 
-  const allFighters = [player, ...Object.values(remotePlayers)];
-  if (!enemy.isHidden) {
-      allFighters.push(enemy);
-  }
+  const isOnline = network.role !== NetworkRole.OFFLINE;
+  const allFighters = isOnline
+    ? [player, ...Object.values(remotePlayers)]         // Online: player + all remote peers
+    : (enemy.isHidden ? [player] : [player, enemy]);   // Offline: player + AI enemy
   allFighters.forEach(p => p.update());
   allFighters.forEach(p => emitSkillAmbient(p));
 
-  // Render floating Nametags and HP Bars for all generic remote players
+  // Render floating nameplates + HP bars above ALL remote fighters
   allFighters.forEach(p => {
-    if (p !== player && p !== enemy && !p.isDead) {
-      const barW = 50, barH = 5;
-      const hpRatio = Math.max(0, p.health / 100);
-      const fx = p.position.x + p.width / 2 - barW / 2;
-      const fy = p.position.y - 15;
-      ctx.fillStyle = '#000'; ctx.fillRect(fx, fy, barW, barH);
-      ctx.fillStyle = p.health > 40 ? '#2ecc71' : '#e74c3c';
-      ctx.fillRect(fx, fy, barW * hpRatio, barH);
-      ctx.strokeStyle = '#fff'; ctx.strokeRect(fx, fy, barW, barH);
-      ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign='center';
-      ctx.fillText(p.name || 'Guest', p.position.x + p.width/2, fy - 6);
-    }
+    if (p === player || p.isDead) return;
+    const cx  = p.position.x + (p.width  || 60) / 2;
+    const barW = 70, barH = 6;
+    const hpRatio = Math.max(0, (p.health || 0) / 100);
+    const fx = cx - barW / 2;
+    const fy = p.position.y - 24;
+    // name
+    ctx.fillStyle = '#fff';
+    ctx.font = '7px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name || 'Fighter', cx, fy - 4);
+    // bar bg
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(fx - 1, fy - 1, barW + 2, barH + 2);
+    // bar fill
+    const barColor = hpRatio > 0.6 ? '#2ecc71' : hpRatio > 0.3 ? '#f39c12' : '#e74c3c';
+    ctx.fillStyle = barColor;
+    ctx.fillRect(fx, fy, barW * hpRatio, barH);
+    ctx.textAlign = 'left';
   });
+
 
   if (gameActive) {
     for (let attacker of allFighters) {
@@ -1071,7 +1075,8 @@ function getPlayerData(p) {
     hp: p.health, fr: p.facingRight, st: p._state,
     atk: p.isAttacking, katk: p.isKnifeAttacking,
     satk: p.isSpecialAttacking, shld: p.isShielding,
-    w: p.width, src: p.img ? p.img.src : ''
+    w: p.width, src: p.img ? p.img.src : '',
+    name: p.name || ''
   };
 }
 
