@@ -1016,18 +1016,19 @@ function animate() {
               if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
 
             } else if (network.role === NetworkRole.HOST) {
-              // HOST: apply damage to the victim and update health bars
-              victim.takeHit(dmg);
-              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
-              // P2 bar for first remote opponent
-              const firstId = Object.keys(remotePlayers)[0];
-              if (firstId && victim === remotePlayers[firstId]) {
-                game.p2HealthBar.style.width = victim.health + '%';
+              // HOST: only apply damage when HOST's player is the attacker
+              // (CLIENT→HOST and CLIENT→CLIENT damage comes via hit_report to avoid double-hits)
+              if (attacker === player) {
+                victim.takeHit(dmg);
+                // Show P2 bar for first remote opponent
+                const firstId = Object.keys(remotePlayers)[0];
+                if (firstId && victim === remotePlayers[firstId]) {
+                  game.p2HealthBar.style.width = victim.health + '%';
+                }
               }
 
             } else if (network.role === NetworkRole.CLIENT) {
-              // CLIENT: report hit to HOST — HOST applies it authoritatively
-              // Identify victim: '__host__' for the host, or the remote peerId
+              // CLIENT detects hit → tell HOST authoritatively
               let victimId = null;
               if (victim === remotePlayers['__host__']) victimId = '__host__';
               else {
@@ -1036,9 +1037,10 @@ function animate() {
                 }
               }
               if (victimId) {
-                network.send({ type: 'hit_report', victimId, dmg });
+                network.send({ type: 'hit_report', victimId, dmg, shielded: victim.isShielding });
               }
             }
+
           }
         }
       }
@@ -1286,16 +1288,12 @@ function setupLobby() {
     // ── HOST receives a hit reported by a CLIENT ───────────────────────────
     } else if (network.role === NetworkRole.HOST && payload.type === 'hit_report') {
       const { victimId, dmg } = payload;
-      // Identify who got hit
       if (victimId === '__host__') {
-        // HOST's own player was hit by a client
         player.takeHit(dmg);
         game.p1HealthBar.style.width = player.health + '%';
       } else if (remotePlayers[victimId]) {
-        // Another remote player was hit
         remotePlayers[victimId].takeHit(dmg);
       }
-      // No else — ignore bogus victimIds
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
       const d = payload.data;
@@ -1322,7 +1320,9 @@ function setupLobby() {
       }
 
       // Apply HOST position/animation — d.host.hp is HOST's authoritative health
+      // Use d.host.fr for the correct facing direction from HOST
       applyPlayerData(remotePlayers['__host__'], d.host, true);
+      remotePlayers['__host__'].facingRight = d.host.fr; // ensure facing is in sync
       remotePlayers['__host__'].health = Math.max(0, d.host.hp ?? 100);
       remotePlayers['__host__'].name   = d.host.name || 'Host';
 
