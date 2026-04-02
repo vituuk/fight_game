@@ -762,6 +762,16 @@ function resetRound(omitPlayerPos = false) {
     player.position.y = 10;
   }
 
+  // --- Remote players: reset health so next round is fair ---
+  Object.values(remotePlayers).forEach(rp => {
+    rp.health             = 100;
+    rp.isDead             = false;
+    rp.isAttacking        = false;
+    rp.isKnifeAttacking   = false;
+    rp.isSpecialAttacking = false;
+    rp.isShielding        = false;
+  });
+
   // --- Enemy (swap sprite) ---
   let stage = STAGES[currentStageIdx];
   enemy.health              = 100;
@@ -1023,18 +1033,18 @@ function animate() {
           onPlayerWin: handlePlayerWin, onPlayerLose: handlePlayerLose });
       }
     } else if (network.role === NetworkRole.HOST) {
-      // HOST decides outcome for all players
-      let livingRemotes = 0;
-      Object.values(remotePlayers).forEach(p => { if (p.health > 0) livingRemotes++; });
-      const hasRemotes = Object.keys(remotePlayers).length > 0;
-
-      if (hasRemotes && (player.health <= 0 || livingRemotes === 0)) {
-        const hostWon = player.health > 0;
-        gameActive = false;
-        network.send({ type: 'round_result', hostWon });
-        game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
-        game.displayText.style.display = 'block';
-        setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2000);
+      const remoteIds = Object.keys(remotePlayers);
+      if (remoteIds.length > 0) {
+        // Check if host is dead OR all remote players are dead
+        const allRemotesDead = remoteIds.every(id => remotePlayers[id].health <= 0);
+        if (player.health <= 0 || allRemotesDead) {
+          const hostWon = player.health > 0;
+          gameActive = false;
+          network.send({ type: 'round_result', hostWon });
+          game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
+          game.displayText.style.display = 'block';
+          setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2500);
+        }
       }
     }
     // CLIENT win condition handled via round_result message from HOST
@@ -1043,32 +1053,33 @@ function animate() {
   // ── Network Broadcast ────────────────────────────────────────────────────
   if (network.role !== NetworkRole.OFFLINE) {
     if (network.role === NetworkRole.CLIENT) {
-      // Just send my own state up to Host
-      network.send({
-        type: 'client_state',
-        data: getPlayerData(player)
-      });
+      network.send({ type: 'client_state', data: getPlayerData(player) });
     } else if (network.role === NetworkRole.HOST) {
-       // Host broadcasts entire universal game state.
-       const clientHp = {};
-       // All friends are in remotePlayers now
-       Object.keys(remotePlayers).forEach(id => { clientHp[id] = remotePlayers[id].health; });
+      // Build authoritative HP map for all clients
+      const clientHp = {};
+      Object.keys(remotePlayers).forEach(id => { clientHp[id] = remotePlayers[id].health; });
 
-       const payload = {
-           host: getPlayerData(player),
-           stageIdx: currentStageIdx,
-           clients: {},
-           clientHp  // each client reads their own HP
-       };
-       Object.keys(remotePlayers).forEach(id => {
-           payload.clients[id] = getPlayerData(remotePlayers[id]);
-       });
-       network.send({ type: 'host_sync', data: payload });
+      const gsClients = {};
+      Object.keys(remotePlayers).forEach(id => { gsClients[id] = getPlayerData(remotePlayers[id]); });
+
+      network.send({
+        type: 'host_sync',
+        data: {
+          host:      getPlayerData(player),
+          clients:   gsClients,
+          clientHp,                // authoritative HP per client peer ID
+          stageIdx:  currentStageIdx
+        }
+      });
+
+      // Update HOST P2 bar to show first connected opponent
+      const firstId = Object.keys(remotePlayers)[0];
+      if (firstId) {
+        game.p2HealthBar.style.width = remotePlayers[firstId].health + '%';
+      }
     }
-
-    // Force native health bars to sync
+    // Always sync local player bar every frame
     game.p1HealthBar.style.width = player.health + '%';
-
   }
 }
 
@@ -1223,68 +1234,101 @@ function setupLobby() {
   };
 
   network.onData = (peerId, payload) => {
+    // ── HOST receives client input ──────────────────────────────────────────
     if (network.role === NetworkRole.HOST && payload.type === 'client_state') {
-       const cd = payload.data;
-       if (!remotePlayers[peerId]) {
-         const joinIdx = Object.keys(_clientJoinOrder).length + 1;
-         _clientJoinOrder[peerId] = joinIdx;
-         remotePlayers[peerId] = new Player(game, {
-           position: { x: SPAWN_XS[joinIdx] ?? 420, y: 10 },
-           velocity: { x: 0, y: 0 },
-           name: cd.name || ('Fighter ' + peerId.substring(0, 4)),
-           facingRight: joinIdx % 2 === 0,
-           offset: { x: -ATTACK_W, y: 70 },
-           spriteSrc: cd.src || '/assets/characters/p1.png',
-           swordSrc: '/assets/characters/sword2.png',
-           shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-           accentColor: BRAWL_COLORS[joinIdx % BRAWL_COLORS.length], isEnemy: false
-         });
-       }
-       applyPlayerData(remotePlayers[peerId], cd, true); // skipHp: HOST owns health
+      const cd = payload.data;
+      if (!remotePlayers[peerId]) {
+        // New client joining — assign a spawn slot
+        const joinIdx = Object.keys(_clientJoinOrder).length + 1;
+        _clientJoinOrder[peerId] = joinIdx;
+        const spawnX = SPAWN_XS[joinIdx] ?? 420;
+        remotePlayers[peerId] = new Player(game, {
+          position:   { x: spawnX, y: 10 },
+          velocity:   { x: 0, y: 0 },
+          name:        cd.name || ('Fighter' + peerId.substring(0, 4)),
+          facingRight: joinIdx % 2 === 0,
+          offset:      { x: -ATTACK_W, y: 70 },
+          spriteSrc:   cd.src || '/assets/characters/p1.png',
+          swordSrc:    '/assets/characters/sword2.png',
+          shieldSrc:   '/assets/characters/shield.png',
+          skillSrc:    '/assets/characters/skill.png',
+          accentColor: BRAWL_COLORS[joinIdx % BRAWL_COLORS.length],
+          isEnemy:     false
+        });
+        remotePlayers[peerId].health    = 100;
+        remotePlayers[peerId].width     = CHAR_W;
+        remotePlayers[peerId].height    = CHAR_H;
+        remotePlayers[peerId].attackBox.width  = ATTACK_W;
+        remotePlayers[peerId].attackBox.height = ATTACK_H;
+      }
+      // Update position/animation — HOST owns health, so skipHp=true
+      applyPlayerData(remotePlayers[peerId], cd, true);
 
+    // ── CLIENT receives full game state from HOST ───────────────────────────
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
-       const d = payload.data;
-       
-       // HOST goes into remotePlayers['__host__'] so they appear in allFighters
-       if (!remotePlayers['__host__']) {
-         remotePlayers['__host__'] = new Player(game, {
-           position: { x: 760, y: 10 }, velocity: { x: 0, y: 0 },
-           name: d.host.name || 'Host',
-           facingRight: false,
-           offset: { x: ATTACK_W, y: 70 },
-           spriteSrc: d.host.src || '/assets/characters/p2.png',
-           swordSrc: '/assets/characters/sword2.png',
-           shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-           accentColor: BRAWL_COLORS[0], isEnemy: true
-         });
-       }
-       applyPlayerData(remotePlayers['__host__'], d.host, true);
-       remotePlayers['__host__'].health = d.host.hp;
-       remotePlayers['__host__'].name = d.host.name || 'Host';
+      const d = payload.data;
 
-       if (d.clients) {
-         Object.keys(d.clients).forEach(clientId => {
-           if (clientId === network.peer.id) return;
-           if (!remotePlayers[clientId]) {
-             remotePlayers[clientId] = new Player(game, {
-               position: { x: 420, y: 10 }, velocity: { x: 0, y: 0 },
-               name: d.clients[clientId].name || ('P' + clientId.substring(0, 4)),
-               facingRight: false, offset: { x: -ATTACK_W, y: 70 },
-               spriteSrc: d.clients[clientId].src || '/assets/characters/p1.png',
-               swordSrc: '/assets/characters/sword2.png',
-               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-               accentColor: '#cc5de8', isEnemy: false
-             });
-           }
-           applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
-         });
-       }
+      // Lazily create HOST's avatar so it appears in allFighters
+      if (!remotePlayers['__host__']) {
+        remotePlayers['__host__'] = new Player(game, {
+          position:   { x: 80, y: 10 },
+          velocity:   { x: 0, y: 0 },
+          name:        d.host.name || 'Host',
+          facingRight: true,
+          offset:      { x: ATTACK_W, y: 70 },
+          spriteSrc:   d.host.src || '/assets/characters/p2.png',
+          swordSrc:    '/assets/characters/sword2.png',
+          shieldSrc:   '/assets/characters/shield.png',
+          skillSrc:    '/assets/characters/skill.png',
+          accentColor: BRAWL_COLORS[0], isEnemy: true
+        });
+        remotePlayers['__host__'].health = 100;
+        remotePlayers['__host__'].width  = CHAR_W;
+        remotePlayers['__host__'].height = CHAR_H;
+        remotePlayers['__host__'].attackBox.width  = ATTACK_W;
+        remotePlayers['__host__'].attackBox.height = ATTACK_H;
+      }
 
-       // Apply our own HP from HOST authority
-       if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
-         player.health = d.clientHp[network.peer.id];
-         game.p1HealthBar.style.width = player.health + '%';
-       }
+      // Apply HOST position/animation — d.host.hp is HOST's authoritative health
+      applyPlayerData(remotePlayers['__host__'], d.host, true);
+      remotePlayers['__host__'].health = Math.max(0, d.host.hp ?? 100);
+      remotePlayers['__host__'].name   = d.host.name || 'Host';
+
+      // Update P2 bar on CLIENT to show HOST health
+      game.p2HealthBar.style.width = remotePlayers['__host__'].health + '%';
+
+      // HOST is damage authority — apply OUR authoritative HP
+      if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
+        const authHp = d.clientHp[network.peer.id];
+        if (typeof authHp === 'number' && authHp >= 0) {
+          player.health = authHp;
+          game.p1HealthBar.style.width = authHp + '%';
+        }
+      }
+
+      // Other connected clients in 3+ player mode
+      Object.keys(d.clients || {}).forEach(clientId => {
+        if (clientId === network.peer.id) return;
+        if (!remotePlayers[clientId]) {
+          remotePlayers[clientId] = new Player(game, {
+            position: { x: 420, y: 10 }, velocity: { x: 0, y: 0 },
+            name:     d.clients[clientId].name || ('P' + clientId.substring(0, 4)),
+            facingRight: false, offset: { x: -ATTACK_W, y: 70 },
+            spriteSrc: d.clients[clientId].src || '/assets/characters/p1.png',
+            swordSrc: '/assets/characters/sword2.png',
+            shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+            accentColor: '#cc5de8', isEnemy: false
+          });
+          remotePlayers[clientId].health = 100;
+          remotePlayers[clientId].width  = CHAR_W;
+          remotePlayers[clientId].height = CHAR_H;
+          remotePlayers[clientId].attackBox.width  = ATTACK_W;
+          remotePlayers[clientId].attackBox.height = ATTACK_H;
+        }
+        applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
+      });
+
+
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
        gameActive = false;
