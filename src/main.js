@@ -1003,6 +1003,12 @@ function animate() {
               victim.takeHit(dmg);
               if (victim === player) game.p1HealthBar.style.width = player.health + '%';
               if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
+              
+              // Sync P2 health bar for the first connected peer online
+              const firstPeerId = Object.keys(remotePlayers)[0];
+              if (firstPeerId && victim === remotePlayers[firstPeerId]) {
+                  game.p2HealthBar.style.width = victim.health + '%';
+              }
             }
           }
         }
@@ -1016,10 +1022,14 @@ function animate() {
         determineWinner({ player, enemy, timerId, game,
           onPlayerWin: handlePlayerWin, onPlayerLose: handlePlayerLose });
       }
-    } else if (network.role === NetworkRole.HOST && !enemy.isHidden) {
-      // HOST decides outcome for both players
-      if (enemy.health <= 0 || player.health <= 0) {
-        const hostWon = enemy.health <= 0;
+    } else if (network.role === NetworkRole.HOST) {
+      // HOST decides outcome for all players
+      let livingRemotes = 0;
+      Object.values(remotePlayers).forEach(p => { if (p.health > 0) livingRemotes++; });
+      const hasRemotes = Object.keys(remotePlayers).length > 0;
+
+      if (hasRemotes && (player.health <= 0 || livingRemotes === 0)) {
+        const hostWon = player.health > 0;
         gameActive = false;
         network.send({ type: 'round_result', hostWon });
         game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
@@ -1190,15 +1200,15 @@ function setupLobby() {
 
   network.onReady = (id) => {
     if (joinId) {
-      lobbySub.textContent = "Connecting to Host...";
-      // Fallback: If connection takes longer than 6s, force offline mode
+      lobbySub.textContent = "Connecting to Host... (requires STUN/TURN)";
+      // Fallback: If connection takes longer than 12s, force offline mode
       setTimeout(() => {
         if (!network.hostConn || network.hostConn.open !== true) {
           lobbySub.style.color = '#ff4757';
-          lobbySub.textContent = "Connection failed. Starting Offline Mode...";
+          lobbySub.textContent = "Connection timed out. Starting Offline Mode...";
           setTimeout(() => btnOffline.click(), 1000);
         }
-      }, 6000);
+      }, 12000);
     } else {
       lobbySub.textContent = "Waiting for challenger...";
       lobbyHostUi.style.display = 'block';
@@ -1290,15 +1300,21 @@ function setupLobby() {
 
 
   network.onDisconnect = (peerId) => {
-    if (remotePlayers[peerId]) {
+    if (remotePlayers[peerId] || remotePlayers['__host__']) {
         console.log(`Player ${peerId} left the arena.`);
         delete remotePlayers[peerId];
-        // Also clean up HOST slot if it was the host who disconnected
-        if (remotePlayers['HOST']) delete remotePlayers['HOST'];
+        delete remotePlayers['__host__'];
         refreshAI(); // Reactivate AI if the last friend left
+        
+        // If we are the client and host left, switch offline
+        if (network.role === NetworkRole.CLIENT) {
+           alert("Host disconnected! Switching to offline mode.");
+           network.role = NetworkRole.OFFLINE;
+           btnOffline.click();
+        }
     } else {
-        alert("Host disconnected!");
-        window.location.href = '/';
+        // We never fully connected, let the connection timeout handle it
+        console.log("Connection closed during lobby.");
     }
   };
 

@@ -26,20 +26,8 @@ class NetworkManager {
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
           {
             urls:       'turn:openrelay.metered.ca:80',
-            username:   'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls:       'turn:openrelay.metered.ca:443',
-            username:   'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls:       'turn:openrelay.metered.ca:443?transport=tcp',
             username:   'openrelayproject',
             credential: 'openrelayproject'
           }
@@ -70,6 +58,11 @@ class NetworkManager {
       console.log('Guest connected: ' + conn.peer);
       this.clients[conn.peer] = conn;
       this._setupHostConnection(conn);
+    });
+
+    this.peer.on('disconnected', () => {
+      console.warn('Lost connection to PeerJS server. Attempting reconnect...');
+      this.peer.reconnect();
     });
 
     this.peer.on('error', (err) => {
