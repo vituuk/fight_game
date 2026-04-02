@@ -565,18 +565,22 @@ const keys = {
 const _isOnlineClient = !!new URLSearchParams(window.location.search).get('join');
 
 function refreshAI() {
-  const friendsConnected = Object.keys(remotePlayers).length > 0;
+  // HOST: count real peer connections from network.clients (first client goes to enemy slot, not remotePlayers)
+  const friendsConnected = _isOnlineClient
+    ? true  // CLIENT always treats host as connected once in game
+    : (Object.keys(network.clients || {}).length > 0);
+
   const p2HealthEl = document.querySelector('.p2-health');
 
   if (_isOnlineClient) {
     // CLIENT: host controls the enemy slot. NEVER run local AI.
     enemy.isAI = false;
-    enemy.isHidden = false; // Host's avatar is always visible once connected
+    enemy.isHidden = false;
   } else if (network.role === NetworkRole.OFFLINE) {
     enemy.isAI = true;        // Solo mode: always AI
     enemy.isHidden = false;
   } else if (network.role === NetworkRole.HOST) {
-    // Online Host mode: prevent AI from taking over the slot, hide until friend joins
+    // Online Host: hide enemy slot only until first friend connects
     enemy.isAI = false;
     enemy.isHidden = !friendsConnected;
   } else {
@@ -587,7 +591,7 @@ function refreshAI() {
   if (p2HealthEl) p2HealthEl.style.visibility = enemy.isHidden ? 'hidden' : 'visible';
 }
 enemy.isAI = true;
-enemy.isHidden = _isOnlineClient; // Hide immediately if joining online
+enemy.isHidden = _isOnlineClient; // CLIENT: hide until first host_sync arrives
 
 const AI = {
   APPROACH:  'approach',
@@ -1007,18 +1011,20 @@ function animate() {
     }
 
     // Win condition
-    // HOST is the authority: decides who won and broadcasts outcome to clients.
-    if (!enemy.isHidden && (enemy.health <= 0 || player.health <= 0)) {
+    // HOST is the authority. Only check when enemy slot is occupied (not hidden).
+    // We check enemy.health because enemy = client's avatar on HOST.
+    const shouldCheckWin = network.role === NetworkRole.OFFLINE
+      ? true
+      : !enemy.isHidden; // Only when a real opponent is present
+
+    if (shouldCheckWin && (enemy.health <= 0 || player.health <= 0)) {
       if (network.role !== NetworkRole.OFFLINE) {
-        // Determine winner on HOST side
-        const hostWon  = enemy.health <= 0;  // enemy = friend (client), so host won if enemy is dead
-        const clientWon = player.health <= 0; // host is dead, client won
+        const hostWon  = enemy.health <= 0;  // enemy=client died, host wins
         gameActive = false;
-        // Tell clients the round result
+        // Broadcast result to client so their screen updates too
         if (network.role === NetworkRole.HOST) {
           network.send({ type: 'round_result', winner: hostWon ? 'host' : 'client' });
         }
-        // Show result text briefly, then reset
         game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
         game.displayText.style.display = 'block';
         setTimeout(() => {
@@ -1258,6 +1264,9 @@ function setupLobby() {
        applyPlayerData(enemy, d.host);
        enemy.name = d.host.name || 'Host Player';
        enemy.isAI = false;
+       enemy.isHidden = false; // Reveal host avatar as soon as data arrives
+       const p2HealthEl2 = document.querySelector('.p2-health');
+       if (p2HealthEl2) p2HealthEl2.style.visibility = 'visible';
        const p2Name = document.querySelector('.p2-health .player-name');
        if (p2Name) p2Name.textContent = enemy.name;
 
