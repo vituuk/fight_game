@@ -1040,20 +1040,15 @@ function animate() {
       });
     } else if (network.role === NetworkRole.HOST) {
        // Host broadcasts entire universal game state.
-       // clientHp tells each client their AUTHORITATIVE health so damage they receive is confirmed.
        const clientHp = {};
-       const clientIds = Object.keys(network.clients);
-       // First friend is mapped to enemy slot — their HP is enemy.health on HOST
-       if (clientIds[0]) clientHp[clientIds[0]] = enemy.health;
-       // Additional friends are in remotePlayers
+       // All friends are in remotePlayers now
        Object.keys(remotePlayers).forEach(id => { clientHp[id] = remotePlayers[id].health; });
 
        const payload = {
            host: getPlayerData(player),
-           enemy: getPlayerData(enemy),
            stageIdx: currentStageIdx,
            clients: {},
-           clientHp  // ← each client reads their own HP from here
+           clientHp  // each client reads their own HP
        };
        Object.keys(remotePlayers).forEach(id => {
            payload.clients[id] = getPlayerData(remotePlayers[id]);
@@ -1063,7 +1058,7 @@ function animate() {
 
     // Force native health bars to sync
     game.p1HealthBar.style.width = player.health + '%';
-    game.p2HealthBar.style.width = enemy.health + '%';
+
   }
 }
 
@@ -1219,42 +1214,76 @@ function setupLobby() {
 
   network.onData = (peerId, payload) => {
     if (network.role === NetworkRole.HOST && payload.type === 'client_state') {
-       if (p2Name) p2Name.textContent = enemy.name;
-       game.p2HealthBar.style.width = enemy.health + '%';
+       const cd = payload.data;
+       if (!remotePlayers[peerId]) {
+         const joinIdx = Object.keys(_clientJoinOrder).length + 1;
+         _clientJoinOrder[peerId] = joinIdx;
+         remotePlayers[peerId] = new Player(game, {
+           position: { x: SPAWN_XS[joinIdx] ?? 420, y: 10 },
+           velocity: { x: 0, y: 0 },
+           name: cd.name || ('Fighter ' + peerId.substring(0, 4)),
+           facingRight: joinIdx % 2 === 0,
+           offset: { x: -ATTACK_W, y: 70 },
+           spriteSrc: cd.src || '/assets/characters/p1.png',
+           swordSrc: '/assets/characters/sword2.png',
+           shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+           accentColor: BRAWL_COLORS[joinIdx % BRAWL_COLORS.length], isEnemy: false
+         });
+       }
+       applyPlayerData(remotePlayers[peerId], cd, true); // skipHp: HOST owns health
 
-       // HOST is damage authority — apply our own health from clientHp
+    } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
+       const d = payload.data;
+       
+       // HOST goes into remotePlayers['__host__'] so they appear in allFighters
+       if (!remotePlayers['__host__']) {
+         remotePlayers['__host__'] = new Player(game, {
+           position: { x: 760, y: 10 }, velocity: { x: 0, y: 0 },
+           name: d.host.name || 'Host',
+           facingRight: false,
+           offset: { x: ATTACK_W, y: 70 },
+           spriteSrc: d.host.src || '/assets/characters/p2.png',
+           swordSrc: '/assets/characters/sword2.png',
+           shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+           accentColor: BRAWL_COLORS[0], isEnemy: true
+         });
+       }
+       applyPlayerData(remotePlayers['__host__'], d.host, true);
+       remotePlayers['__host__'].health = d.host.hp;
+       remotePlayers['__host__'].name = d.host.name || 'Host';
+
+       if (d.clients) {
+         Object.keys(d.clients).forEach(clientId => {
+           if (clientId === network.peer.id) return;
+           if (!remotePlayers[clientId]) {
+             remotePlayers[clientId] = new Player(game, {
+               position: { x: 420, y: 10 }, velocity: { x: 0, y: 0 },
+               name: d.clients[clientId].name || ('P' + clientId.substring(0, 4)),
+               facingRight: false, offset: { x: -ATTACK_W, y: 70 },
+               spriteSrc: d.clients[clientId].src || '/assets/characters/p1.png',
+               swordSrc: '/assets/characters/sword2.png',
+               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+               accentColor: '#cc5de8', isEnemy: false
+             });
+           }
+           applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
+         });
+       }
+
+       // Apply our own HP from HOST authority
        if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
          player.health = d.clientHp[network.peer.id];
          game.p1HealthBar.style.width = player.health + '%';
        }
 
-       // Other Guests show up as remote players
-       Object.keys(d.clients).forEach(clientId => {
-           if (clientId === network.peer.id) return;
-           if (!remotePlayers[clientId]) {
-               remotePlayers[clientId] = new Player(game, {
-                   position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
-                   name: d.clients[clientId].name || ('Fighter ' + clientId.substring(0,4)), 
-                   facingRight: false,
-                   offset: { x: -ATTACK_W, y: 70 },
-                   spriteSrc: d.clients[clientId].src || '/assets/characters/p1.png', 
-                   swordSrc: '/assets/characters/sword2.png',
-                   shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-                   accentColor: '#3498db', isEnemy: false
-               });
-           }
-           applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
-       });
-    }
-    // HOST broadcasts round outcome to clients so they see win/lose correctly
-    else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
-      gameActive = false;
-      game.displayText.textContent = payload.hostWon ? 'You Lose...' : 'You Win! 🏆';
-      game.displayText.style.display = 'block';
-      setTimeout(() => {
-        game.displayText.style.display = 'none';
-        resetRound(false);
-      }, 2000);
+    } else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
+       gameActive = false;
+       game.displayText.textContent = payload.hostWon ? 'You Lose...' : 'You Win! 🏆';
+       game.displayText.style.display = 'block';
+       setTimeout(() => {
+         game.displayText.style.display = 'none';
+         resetRound(false);
+       }, 2000);
     }
   };
 
