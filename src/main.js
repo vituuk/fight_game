@@ -973,7 +973,6 @@ function animate() {
     }
   });
 
-  // Collision Setup for N-Players!
   if (gameActive) {
     for (let attacker of allFighters) {
       if (attacker.isDead || (!attacker.isAttacking && !attacker.isKnifeAttacking && !attacker.isSpecialAttacking)) continue;
@@ -995,16 +994,18 @@ function animate() {
             attacker.isKnifeAttacking = false;
             attacker.isSpecialAttacking = false;
 
-            victim.takeHit(dmg);
             createHitSparks(hx, hy);
             if (victim.isShielding) createShieldSparks(hx, hy);
             else if (dmg === 10) createSwordSparks(hx, hy, attacker.facingRight);
             else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
             else if (dmg === 25) createSkillSparks(hx, hy);
-            
-            // Only update native top HUD if it's the main player or main enemy
-            if (victim === player) game.p1HealthBar.style.width = player.health + '%';
-            if (victim === enemy) game.p2HealthBar.style.width = enemy.health + '%';
+
+            // Only HOST/OFFLINE modifies health — CLIENT receives damage via clientHp from HOST
+            if (network.role !== NetworkRole.CLIENT) {
+              victim.takeHit(dmg);
+              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
+              if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
+            }
           }
         }
       }
@@ -1091,10 +1092,11 @@ function getPlayerData(p) {
   };
 }
 
-function applyPlayerData(p, d) {
+function applyPlayerData(p, d, skipHp = false) {
     p.position.x = d.x; p.position.y = d.y;
     p.velocity.x = d.vx; p.velocity.y = d.vy;
-    p.health = d.hp; p.facingRight = d.fr; p._state = d.st;
+    p.facingRight = d.fr; p._state = d.st;
+    if (!skipHp) p.health = d.hp; // HOST skips this so its collision damage isn't overwritten
     if (d.atk && !p.isAttacking) p.attack();
     if (d.katk && !p.isKnifeAttacking) p.knifeAttack();
     if (d.satk && !p.isSpecialAttacking) p.specialAttack();
@@ -1235,7 +1237,8 @@ function setupLobby() {
        // This hides the Samurai AI by overwriting the 'enemy' position/sprite
        const clientIds = Object.keys(network.clients);
        if (peerId === clientIds[0]) {
-           applyPlayerData(enemy, clientData);
+           applyPlayerData(enemy, clientData, true); // skipHp=true: HOST owns enemy.health
+
            enemy.name = clientData.name || ('Fighter ' + peerId.substring(0,4));
            enemy.isAI = false;
            // Ensure big HUD shows their name
