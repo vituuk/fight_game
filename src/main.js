@@ -1289,6 +1289,11 @@ function setupLobby() {
     } else if (network.role === NetworkRole.HOST && payload.type === 'hit_report') {
       const { victimId, dmg } = payload;
       if (victimId === '__host__') {
+        // Show blood sparks on HOST screen where player got hit
+        const hx = player.position.x + CHAR_W / 2;
+        const hy = player.position.y + CHAR_H * 0.4;
+        createHitSparks(hx, hy);
+        createSwordSparks(hx, hy, !player.facingRight);
         player.takeHit(dmg);
         game.p1HealthBar.style.width = player.health + '%';
       } else if (remotePlayers[victimId]) {
@@ -1333,8 +1338,24 @@ function setupLobby() {
       if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
         const authHp = d.clientHp[network.peer.id];
         if (typeof authHp === 'number' && authHp >= 0) {
+          const prevHp = player.health;
           player.health = authHp;
           game.p1HealthBar.style.width = authHp + '%';
+
+          // Show blood/hurt effect on CLIENT when HOST deals damage to us
+          if (authHp < prevHp && authHp > 0) {
+            player._hitFlash = 12;
+            if (typeof player._setState === 'function') player._setState('hurt');
+            if (typeof player._squash === 'function')   player._squash(0.85, 1.25);
+            const hx = player.position.x + CHAR_W / 2;
+            const hy = player.position.y + CHAR_H * 0.4;
+            createHitSparks(hx, hy);
+            createSwordSparks(hx, hy, player.facingRight);
+          }
+          if (authHp <= 0 && !player.isDead) {
+            player.isDead = true;
+            if (typeof player._setState === 'function') player._setState('dead');
+          }
         }
       }
 
