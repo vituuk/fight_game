@@ -563,15 +563,24 @@ const keys = {
 // refreshAI() decides who controls the enemy slot at any given moment.
 function refreshAI() {
   const friendsConnected = Object.keys(remotePlayers).length > 0;
+  const p2HealthEl = document.querySelector('.p2-health');
+
   if (network.role === NetworkRole.OFFLINE) {
     enemy.isAI = true;        // Solo mode: always AI
+    enemy.isHidden = false;
   } else if (network.role === NetworkRole.HOST) {
-    enemy.isAI = !friendsConnected; // Host: AI only when lobby is empty
+    // Online Host mode: prevent AI from taking over the slot, hide until friend joins
+    enemy.isAI = false; 
+    enemy.isHidden = !friendsConnected;
   } else {
     enemy.isAI = false;       // Client: Host always controls the enemy
+    enemy.isHidden = false;
   }
+
+  if (p2HealthEl) p2HealthEl.style.visibility = enemy.isHidden ? 'hidden' : 'visible';
 }
 enemy.isAI = true;
+enemy.isHidden = false;
 
 const AI = {
   APPROACH:  'approach',
@@ -782,16 +791,20 @@ function resetRound(omitPlayerPos = false) {
   aiState    = AI.APPROACH;
   aiTimer    = 0;
   aiCooldown = 0;
-  // HOST only fights AI when lobby is empty. Friends take over the enemy slot.
+  
+  // Pivot AI based on connections: Solo = Samurai, Duo = PvP
   refreshAI();
 
-  // --- Timer ---
-  countdown = 60;
-  game.timerEl.innerHTML = countdown;
-  clearTimeout(timerId);
-  decreaseTimer();
-
-  selectSkill('sword');
+  // Reset name based on current persona
+  stage = STAGES[currentStageIdx];
+  if (enemy.isAI) {
+    enemy.name = stage.enemyName;
+    const enemyImg = new Image();
+    enemyImg.src = stage.enemySrc;
+    enemy.img = enemyImg;
+    const p2Name = document.querySelector('.p2-health .player-name');
+    if (p2Name) p2Name.textContent = enemy.name;
+  }
 }
 
 let isTransitioning     = false;
@@ -926,7 +939,10 @@ function animate() {
     enemy.velocity.x = 0;
   }
 
-  const allFighters = [player, enemy, ...Object.values(remotePlayers)];
+  const allFighters = [player, ...Object.values(remotePlayers)];
+  if (!enemy.isHidden) {
+      allFighters.push(enemy);
+  }
   allFighters.forEach(p => p.update());
   allFighters.forEach(p => emitSkillAmbient(p));
 
@@ -984,13 +1000,20 @@ function animate() {
     }
 
     // Win condition - N-Player sandbox rules: keep playing until reset!
+    // Win condition 
     if (enemy.health <= 0 || player.health <= 0) {
-      gameActive = false;
-      determineWinner({
-        player, enemy, timerId, game,
-        onPlayerWin:  handlePlayerWin,
-        onPlayerLose: handlePlayerLose,
-      });
+      // In Multiplayer, we just reset the round in the SAME arena for 1v1 focus
+      if (network.role !== NetworkRole.OFFLINE) {
+        gameActive = false;
+        setTimeout(() => resetRound(false), 2000);
+      } else {
+        gameActive = false;
+        determineWinner({
+          player, enemy, timerId, game,
+          onPlayerWin:  handlePlayerWin,
+          onPlayerLose: handlePlayerLose,
+        });
+      }
     }
   }
 
@@ -1003,12 +1026,21 @@ function animate() {
         data: getPlayerData(player)
       });
     } else if (network.role === NetworkRole.HOST) {
-       // Host broadcasts entire universal game state, INCLUDING the AI Boss!
+       // Host broadcasts entire universal game state.
+       // clientHp tells each client their AUTHORITATIVE health so damage they receive is confirmed.
+       const clientHp = {};
+       const clientIds = Object.keys(network.clients);
+       // First friend is mapped to enemy slot — their HP is enemy.health on HOST
+       if (clientIds[0]) clientHp[clientIds[0]] = enemy.health;
+       // Additional friends are in remotePlayers
+       Object.keys(remotePlayers).forEach(id => { clientHp[id] = remotePlayers[id].health; });
+
        const payload = {
            host: getPlayerData(player),
-           enemy: getPlayerData(enemy), // AI Boss 
-           stageIdx: currentStageIdx,   // For stage syncing
-           clients: {}
+           enemy: getPlayerData(enemy),
+           stageIdx: currentStageIdx,
+           clients: {},
+           clientHp  // ← each client reads their own HP from here
        };
        Object.keys(remotePlayers).forEach(id => {
            payload.clients[id] = getPlayerData(remotePlayers[id]);
@@ -1172,65 +1204,76 @@ function setupLobby() {
 
   network.onData = (peerId, payload) => {
     if (network.role === NetworkRole.HOST && payload.type === 'client_state') {
-       if (!remotePlayers[peerId]) {
-           remotePlayers[peerId] = new Player(game, {
-               position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
-               name: 'Fighter ' + peerId.substring(0,4), facingRight: false,
-               offset: { x: -ATTACK_W, y: 70 },
-               spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
-               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-               accentColor: '#3498db', isEnemy: false
-           });
-           remotePlayers[peerId].width = CHAR_W; remotePlayers[peerId].height = CHAR_H;
-           remotePlayers[peerId].attackBox.width = ATTACK_W; remotePlayers[peerId].attackBox.height = ATTACK_H;
-       }
-       applyPlayerData(remotePlayers[peerId], payload.data);
-    } 
-    else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
-       const d = payload.data;
+       const clientData = payload.data;
        
-       // Sync Stage Index if Host triggers a stage transition
-       if (d.stageIdx !== undefined && d.stageIdx !== currentStageIdx && !isTransitioning) {
-           goToStage(d.stageIdx);
-       }
-
-       // Map the Host's AI Enemy perfectly to our local enemy so we can fight the Boss together!
-       if (d.enemy) applyPlayerData(enemy, d.enemy);
-       
-       // Create a generic RemotePlayer slot for the actual Host character
-       if (!remotePlayers['HOST']) {
-           remotePlayers['HOST'] = new Player(game, {
-               position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
-               name: 'Host Player', facingRight: false,
-               offset: { x: -ATTACK_W, y: 70 },
-               spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
-               shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
-               accentColor: '#e74c3c', isEnemy: false
-           });
-           remotePlayers['HOST'].width = CHAR_W; remotePlayers['HOST'].height = CHAR_H;
-           remotePlayers['HOST'].attackBox.width = ATTACK_W; remotePlayers['HOST'].attackBox.height = ATTACK_H;
-       }
-       applyPlayerData(remotePlayers['HOST'], d.host);
-
-       // Handle all other friends in the Lobby
-       Object.keys(d.clients).forEach(clientId => {
-           if (clientId === network.peer.id) return; // Ignore my own data bouncing back
-           if (!remotePlayers[clientId]) {
-               remotePlayers[clientId] = new Player(game, {
+       // If this is our FIRST friend, they become the 'enemy' (Big HUD)
+       // This hides the Samurai AI by overwriting the 'enemy' position/sprite
+       const clientIds = Object.keys(network.clients);
+       if (peerId === clientIds[0]) {
+           applyPlayerData(enemy, clientData);
+           enemy.name = clientData.name || ('Fighter ' + peerId.substring(0,4));
+           enemy.isAI = false;
+           // Ensure big HUD shows their name
+           const p2Name = document.querySelector('.p2-health .player-name');
+           if (p2Name) p2Name.textContent = enemy.name;
+       } else {
+           // Additional friends become Guests
+           if (!remotePlayers[peerId]) {
+               remotePlayers[peerId] = new Player(game, {
                    position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
-                   name: 'Fighter ' + clientId.substring(0,4), facingRight: false,
+                   name: clientData.name || ('Fighter ' + peerId.substring(0,4)), 
+                   facingRight: false,
                    offset: { x: -ATTACK_W, y: 70 },
-                   spriteSrc: '/assets/characters/p1.png', swordSrc: '/assets/characters/sword2.png',
+                   spriteSrc: clientData.src || '/assets/characters/p1.png', 
+                   swordSrc: '/assets/characters/sword2.png',
                    shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
                    accentColor: '#3498db', isEnemy: false
                });
-               remotePlayers[clientId].width = CHAR_W; remotePlayers[clientId].height = CHAR_H;
-               remotePlayers[clientId].attackBox.width = ATTACK_W; remotePlayers[clientId].attackBox.height = ATTACK_H;
+           }
+           applyPlayerData(remotePlayers[peerId], clientData);
+       }
+    }     else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
+       const d = payload.data;
+       
+       // In Client mode, the Host is ALWAYS our 'enemy' (Big HUD)
+       applyPlayerData(enemy, d.host);
+       enemy.name = d.host.name || 'Host Player';
+       enemy.isAI = false;
+       const p2Name = document.querySelector('.p2-health .player-name');
+       if (p2Name) p2Name.textContent = enemy.name;
+
+       // Apply authoritative health to OUR OWN player (host computed this from collisions)
+       if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
+         const authHp = d.clientHp[network.peer.id];
+         if (authHp < player.health) {  // Only apply if we took damage (never heal hack)
+           player.takeHit(player.health - authHp);
+         } else {
+           player.health = authHp;  // Sync resets (round resets)
+         }
+         game.p1HealthBar.style.width = player.health + '%';
+       }
+
+       // Other Guests show up as remote players
+       Object.keys(d.clients).forEach(clientId => {
+           if (clientId === network.peer.id) return;
+           if (!remotePlayers[clientId]) {
+               remotePlayers[clientId] = new Player(game, {
+                   position: { x: 500, y: 10 }, velocity: { x: 0, y: 0 },
+                   name: d.clients[clientId].name || ('Fighter ' + clientId.substring(0,4)), 
+                   facingRight: false,
+                   offset: { x: -ATTACK_W, y: 70 },
+                   spriteSrc: d.clients[clientId].src || '/assets/characters/p1.png', 
+                   swordSrc: '/assets/characters/sword2.png',
+                   shieldSrc: '/assets/characters/shield.png', skillSrc: '/assets/characters/skill.png',
+                   accentColor: '#3498db', isEnemy: false
+               });
            }
            applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
        });
     }
   };
+
+
 
   network.onDisconnect = (peerId) => {
     if (remotePlayers[peerId]) {
