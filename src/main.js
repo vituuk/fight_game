@@ -1000,11 +1000,13 @@ function animate() {
             else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
             else if (dmg === 25) createSkillSparks(hx, hy);
 
-            // Only HOST/OFFLINE modifies health — CLIENT receives damage via clientHp from HOST
-            if (network.role !== NetworkRole.CLIENT) {
+            // Each player is only responsible for their OWN health.
+            // Offline: apply to whoever was hit.
+            // Online: only apply if the victim is the LOCAL player (prevents double-counting).
+            const shouldApplyDmg = network.role === NetworkRole.OFFLINE || victim === player;
+            if (shouldApplyDmg) {
               victim.takeHit(dmg);
-              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
-              if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
+              game.p1HealthBar.style.width = player.health + '%';
             }
           }
         }
@@ -1012,33 +1014,26 @@ function animate() {
     }
 
     // Win condition
-    // HOST is the authority. Only check when enemy slot is occupied (not hidden).
-    // We check enemy.health because enemy = client's avatar on HOST.
-    const shouldCheckWin = network.role === NetworkRole.OFFLINE
-      ? true
-      : !enemy.isHidden; // Only when a real opponent is present
-
-    if (shouldCheckWin && (enemy.health <= 0 || player.health <= 0)) {
-      if (network.role !== NetworkRole.OFFLINE) {
-        const hostWon  = enemy.health <= 0;  // enemy=client died, host wins
+    // Online: each player checks if THEY died (symmetric)
+    // Offline: check both as usual
+    if (network.role === NetworkRole.OFFLINE) {
+      if (!enemy.isHidden && (enemy.health <= 0 || player.health <= 0)) {
         gameActive = false;
-        // Broadcast result to client so their screen updates too
-        if (network.role === NetworkRole.HOST) {
-          network.send({ type: 'round_result', winner: hostWon ? 'host' : 'client' });
-        }
-        game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
+        determineWinner({ player, enemy, timerId, game,
+          onPlayerWin: handlePlayerWin, onPlayerLose: handlePlayerLose });
+      }
+    } else {
+      // Each player detects their own death and shows result locally
+      if (player.health <= 0 && !player.isDead) {
+        gameActive = false;
+        game.displayText.textContent = 'You Lose...';
         game.displayText.style.display = 'block';
-        setTimeout(() => {
-          game.displayText.style.display = 'none';
-          resetRound(false);
-        }, 2000);
-      } else {
+        setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2000);
+      } else if (enemy.health <= 0 && !enemy.isDead && !enemy.isHidden) {
         gameActive = false;
-        determineWinner({
-          player, enemy, timerId, game,
-          onPlayerWin:  handlePlayerWin,
-          onPlayerLose: handlePlayerLose,
-        });
+        game.displayText.textContent = 'You Win! 🏆';
+        game.displayText.style.display = 'block';
+        setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2000);
       }
     }
   }
@@ -1092,11 +1087,10 @@ function getPlayerData(p) {
   };
 }
 
-function applyPlayerData(p, d, skipHp = false) {
+function applyPlayerData(p, d) {
     p.position.x = d.x; p.position.y = d.y;
     p.velocity.x = d.vx; p.velocity.y = d.vy;
-    p.facingRight = d.fr; p._state = d.st;
-    if (!skipHp) p.health = d.hp; // HOST skips this so its collision damage isn't overwritten
+    p.health = d.hp; p.facingRight = d.fr; p._state = d.st;
     if (d.atk && !p.isAttacking) p.attack();
     if (d.katk && !p.isKnifeAttacking) p.knifeAttack();
     if (d.satk && !p.isSpecialAttacking) p.specialAttack();
@@ -1234,13 +1228,13 @@ function setupLobby() {
        const clientData = payload.data;
        
        // If this is our FIRST friend, they become the 'enemy' (Big HUD)
-       // This hides the Samurai AI by overwriting the 'enemy' position/sprite
        const clientIds = Object.keys(network.clients);
        if (peerId === clientIds[0]) {
-           applyPlayerData(enemy, clientData, true); // skipHp=true: HOST owns enemy.health
-
+           applyPlayerData(enemy, clientData);
            enemy.name = clientData.name || ('Fighter ' + peerId.substring(0,4));
            enemy.isAI = false;
+           // p2 HUD shows host's health (from their broadcast)
+           game.p2HealthBar.style.width = enemy.health + '%';
            // Ensure big HUD shows their name
            const p2Name = document.querySelector('.p2-health .player-name');
            if (p2Name) p2Name.textContent = enemy.name;
@@ -1260,29 +1254,19 @@ function setupLobby() {
            }
            applyPlayerData(remotePlayers[peerId], clientData);
        }
-    }     else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
+    } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
        const d = payload.data;
-       
-       // In Client mode, the Host is ALWAYS our 'enemy' (Big HUD)
+
+       // Host is our 'enemy' — sync position, animation, and their health
        applyPlayerData(enemy, d.host);
        enemy.name = d.host.name || 'Host Player';
        enemy.isAI = false;
-       enemy.isHidden = false; // Reveal host avatar as soon as data arrives
+       enemy.isHidden = false;
        const p2HealthEl2 = document.querySelector('.p2-health');
        if (p2HealthEl2) p2HealthEl2.style.visibility = 'visible';
        const p2Name = document.querySelector('.p2-health .player-name');
        if (p2Name) p2Name.textContent = enemy.name;
-
-       // Apply authoritative health to OUR OWN player (host computed this from collisions)
-       if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
-         const authHp = d.clientHp[network.peer.id];
-         if (authHp < player.health) {  // Only apply if we took damage (never heal hack)
-           player.takeHit(player.health - authHp);
-         } else {
-           player.health = authHp;  // Sync resets (round resets)
-         }
-         game.p1HealthBar.style.width = player.health + '%';
-       }
+       game.p2HealthBar.style.width = enemy.health + '%';
 
        // Other Guests show up as remote players
        Object.keys(d.clients).forEach(clientId => {
