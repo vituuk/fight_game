@@ -763,7 +763,7 @@ function resetRound(omitPlayerPos = false) {
   }
 
   // --- Enemy (swap sprite) ---
-  const stage = STAGES[currentStageIdx];
+  let stage = STAGES[currentStageIdx];
   enemy.health              = 100;
   enemy.isDead              = false;
   enemy.isAttacking         = false;
