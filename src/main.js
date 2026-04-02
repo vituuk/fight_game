@@ -976,37 +976,29 @@ function animate() {
   if (gameActive) {
     for (let attacker of allFighters) {
       if (attacker.isDead || (!attacker.isAttacking && !attacker.isKnifeAttacking && !attacker.isSpecialAttacking)) continue;
-      
       for (let victim of allFighters) {
         if (attacker === victim || victim.isDead) continue;
-        
         if (rectangularCollision({ rectangle1: attacker, rectangle2: victim })) {
           const hx = victim.position.x + CHAR_W / 2;
           const hy = victim.position.y + CHAR_H * 0.4;
-          
           let dmg = 0;
           if (attacker.isAttacking) dmg = 10;
           else if (attacker.isKnifeAttacking) dmg = 15;
           else if (attacker.isSpecialAttacking) dmg = 25;
-          
           if (dmg > 0) {
             attacker.isAttacking = false;
             attacker.isKnifeAttacking = false;
             attacker.isSpecialAttacking = false;
-
             createHitSparks(hx, hy);
             if (victim.isShielding) createShieldSparks(hx, hy);
             else if (dmg === 10) createSwordSparks(hx, hy, attacker.facingRight);
             else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
             else if (dmg === 25) createSkillSparks(hx, hy);
-
-            // Each player is only responsible for their OWN health.
-            // Offline: apply to whoever was hit.
-            // Online: only apply if the victim is the LOCAL player (prevents double-counting).
-            const shouldApplyDmg = network.role === NetworkRole.OFFLINE || victim === player;
-            if (shouldApplyDmg) {
+            // HOST/OFFLINE: compute all damage. CLIENT: visual only (gets HP from HOST's clientHp).
+            if (network.role !== NetworkRole.CLIENT) {
               victim.takeHit(dmg);
-              game.p1HealthBar.style.width = player.health + '%';
+              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
+              if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
             }
           }
         }
@@ -1014,28 +1006,24 @@ function animate() {
     }
 
     // Win condition
-    // Online: each player checks if THEY died (symmetric)
-    // Offline: check both as usual
     if (network.role === NetworkRole.OFFLINE) {
       if (!enemy.isHidden && (enemy.health <= 0 || player.health <= 0)) {
         gameActive = false;
         determineWinner({ player, enemy, timerId, game,
           onPlayerWin: handlePlayerWin, onPlayerLose: handlePlayerLose });
       }
-    } else {
-      // Each player detects their own death and shows result locally
-      if (player.health <= 0 && !player.isDead) {
+    } else if (network.role === NetworkRole.HOST && !enemy.isHidden) {
+      // HOST decides outcome for both players
+      if (enemy.health <= 0 || player.health <= 0) {
+        const hostWon = enemy.health <= 0;
         gameActive = false;
-        game.displayText.textContent = 'You Lose...';
-        game.displayText.style.display = 'block';
-        setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2000);
-      } else if (enemy.health <= 0 && !enemy.isDead && !enemy.isHidden) {
-        gameActive = false;
-        game.displayText.textContent = 'You Win! 🏆';
+        network.send({ type: 'round_result', hostWon });
+        game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
         game.displayText.style.display = 'block';
         setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2000);
       }
     }
+    // CLIENT win condition handled via round_result message from HOST
   }
 
   // ── Network Broadcast ────────────────────────────────────────────────────
@@ -1087,10 +1075,11 @@ function getPlayerData(p) {
   };
 }
 
-function applyPlayerData(p, d) {
+function applyPlayerData(p, d, skipHp = false) {
     p.position.x = d.x; p.position.y = d.y;
     p.velocity.x = d.vx; p.velocity.y = d.vy;
-    p.health = d.hp; p.facingRight = d.fr; p._state = d.st;
+    p.facingRight = d.fr; p._state = d.st;
+    if (!skipHp) p.health = d.hp;
     if (d.atk && !p.isAttacking) p.attack();
     if (d.katk && !p.isKnifeAttacking) p.knifeAttack();
     if (d.satk && !p.isSpecialAttacking) p.specialAttack();
@@ -1230,7 +1219,7 @@ function setupLobby() {
        // If this is our FIRST friend, they become the 'enemy' (Big HUD)
        const clientIds = Object.keys(network.clients);
        if (peerId === clientIds[0]) {
-           applyPlayerData(enemy, clientData);
+           applyPlayerData(enemy, clientData, true); // skipHp: HOST owns enemy.health
            enemy.name = clientData.name || ('Fighter ' + peerId.substring(0,4));
            enemy.isAI = false;
            // p2 HUD shows host's health (from their broadcast)
@@ -1256,9 +1245,8 @@ function setupLobby() {
        }
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
        const d = payload.data;
-
-       // Host is our 'enemy' — sync position, animation, and their health
-       applyPlayerData(enemy, d.host);
+       // HOST syncs position + animation flags for our opponent view
+       applyPlayerData(enemy, d.host); // enemy.health set to host's health (their self-reported HP)
        enemy.name = d.host.name || 'Host Player';
        enemy.isAI = false;
        enemy.isHidden = false;
@@ -1267,6 +1255,12 @@ function setupLobby() {
        const p2Name = document.querySelector('.p2-health .player-name');
        if (p2Name) p2Name.textContent = enemy.name;
        game.p2HealthBar.style.width = enemy.health + '%';
+
+       // HOST is damage authority — apply our own health from clientHp
+       if (d.clientHp && network.peer && d.clientHp[network.peer.id] !== undefined) {
+         player.health = d.clientHp[network.peer.id];
+         game.p1HealthBar.style.width = player.health + '%';
+       }
 
        // Other Guests show up as remote players
        Object.keys(d.clients).forEach(clientId => {
@@ -1289,8 +1283,7 @@ function setupLobby() {
     // HOST broadcasts round outcome to clients so they see win/lose correctly
     else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
       gameActive = false;
-      const iWon = payload.winner === 'client'; // CLIENT won if host says 'client'
-      game.displayText.textContent = iWon ? 'You Win! 🏆' : 'You Lose...';
+      game.displayText.textContent = payload.hostWon ? 'You Lose...' : 'You Win! 🏆';
       game.displayText.style.display = 'block';
       setTimeout(() => {
         game.displayText.style.display = 'none';
