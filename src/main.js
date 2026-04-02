@@ -574,16 +574,31 @@ const _isOnlineClient = !!new URLSearchParams(window.location.search).get('join'
 function refreshAI() {
   const isOnline = network.role !== NetworkRole.OFFLINE;
   const p2HealthEl = document.querySelector('.p2-health');
+  const p2NameEl   = document.querySelector('.p2-health .player-name');
 
   if (!isOnline) {
-    enemy.isAI = true;
+    // OFFLINE: show AI enemy health bar with stage enemy name
+    enemy.isAI    = true;
     enemy.isHidden = false;
+    if (p2HealthEl) p2HealthEl.style.visibility = 'visible';
+    if (p2NameEl)   p2NameEl.textContent = STAGES[currentStageIdx].enemyName;
   } else {
-    // Online: no AI, no special enemy slot — use remotePlayers for everyone
-    enemy.isAI = false;
+    // ONLINE: hide AI enemy, show P2 bar for the first connected remote player
+    enemy.isAI    = false;
     enemy.isHidden = true;
+
+    const remoteIds     = Object.keys(remotePlayers);
+    const hasOpponent   = remoteIds.length > 0;
+
+    if (p2HealthEl) p2HealthEl.style.visibility = hasOpponent ? 'visible' : 'hidden';
+
+    // Name the opponent slot dynamically
+    if (hasOpponent && p2NameEl) {
+      const firstId = remoteIds[0];
+      const opponentName = remotePlayers[firstId].name || 'Opponent';
+      p2NameEl.textContent = opponentName;
+    }
   }
-  if (p2HealthEl) p2HealthEl.style.visibility = enemy.isHidden ? 'hidden' : 'visible';
 }
 enemy.isAI = true;
 enemy.isHidden = _isOnlineClient;
