@@ -1332,6 +1332,9 @@ function setupLobby() {
         player._hitFlash = 12;
         if (typeof player._setState === 'function') player._setState('hurt');
         if (typeof player._squash  === 'function') player._squash(0.85, 1.25);
+        // Immediately push HOST's new HP to ALL clients so their P2 bar updates right away
+        // (don't wait for the next host_sync frame — that delay caused the 'invisible health drain' bug)
+        network.send({ type: 'host_hp', hp: player.health });
       }
 
     // ── CLIENT receives full game state from HOST ───────────────────────────
@@ -1417,6 +1420,21 @@ function setupLobby() {
       });
 
 
+
+    } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_hp') {
+      // HOST is broadcasting its HP immediately after taking a hit — update our P2 bar right away
+      const newHp = Math.max(0, payload.hp ?? 100);
+      if (remotePlayers['__host__']) {
+        remotePlayers['__host__'].health = newHp;
+      }
+      game.p2HealthBar.style.width = newHp + '%';
+      // Visual hurt flash on HOST avatar so CLIENT sees the hit land
+      if (remotePlayers['__host__']) {
+        remotePlayers['__host__']._hitFlash = 10;
+        if (typeof remotePlayers['__host__']._setState === 'function') {
+          remotePlayers['__host__']._setState('hurt');
+        }
+      }
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
        gameActive = false;
