@@ -1215,15 +1215,39 @@ heroBtns.forEach(btn => {
 
 
 // ─── Multiplayer Lobby ──────────────────────────────────────────────────────
-const urlParams   = new URLSearchParams(window.location.search);
-const joinId      = urlParams.get('join');
-const lobbyScreen = document.getElementById('lobby-screen');
-const lobbySub    = document.getElementById('lobby-sub');
-const lobbyHostUi = document.getElementById('lobby-host-ui');
-const inviteInput = document.getElementById('invite-link-input');
-const btnCopy     = document.getElementById('btn-copy');
-const btnOffline  = document.getElementById('btn-play-offline');
-const uiLayer     = document.getElementById('ui-layer');
+const urlParams      = new URLSearchParams(window.location.search);
+const joinId         = urlParams.get('join');
+const lobbyScreen    = document.getElementById('lobby-screen');
+const lobbySub       = document.getElementById('lobby-sub');
+const lobbyHostUi    = document.getElementById('lobby-host-ui');
+const inviteInput    = document.getElementById('invite-link-input');
+const btnCopy        = document.getElementById('btn-copy');
+const btnOffline     = document.getElementById('btn-play-offline');
+const uiLayer        = document.getElementById('ui-layer');
+const playerNameInput = document.getElementById('player-name-input');
+const btnEnterArena   = document.getElementById('btn-enter-arena');
+const lobbyNameUi     = document.getElementById('lobby-name-ui');
+
+// ─── Enter Arena: capture name then start network ─────────────────────────────
+function commitPlayerName() {
+  const typed = playerNameInput.value.trim().toUpperCase();
+  if (typed) {
+    player.name = typed;
+    if (p1NameLabel) p1NameLabel.textContent = typed;
+  }
+  // Hide name panel, reveal status + offline button
+  lobbyNameUi.style.display  = 'none';
+  lobbySub.style.display     = 'block';
+  btnOffline.style.display   = 'inline-block';
+  // Kick off the WebRTC handshake
+  network.init(joinId);
+}
+
+btnEnterArena.addEventListener('click', commitPlayerName);
+playerNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') commitPlayerName();
+});
+
 
 function setupLobby() {
   uiLayer.style.display = 'none';
@@ -1400,8 +1424,6 @@ function setupLobby() {
         console.log("Connection closed during lobby.");
     }
   };
-
-  network.init(joinId);
 }
 
 btnCopy.addEventListener('click', () => {

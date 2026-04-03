@@ -74,7 +74,34 @@
       <div id="lobby-screen" class="game-over-screen">
         <div class="game-over-content">
           <div id="lobby-title" class="game-over-title">ONLINE ARENA</div>
-          <div id="lobby-sub" class="game-over-sub" style="margin-bottom: 20px;">Connecting to WebRTC...</div>
+
+          <!-- Name entry panel (shown before connecting) -->
+          <div id="lobby-name-ui" style="width:100%; margin-bottom: 18px;">
+            <p style="font-size: 9px; color: #aaa; margin-bottom: 8px; letter-spacing: 1px;">YOUR FIGHTER NAME:</p>
+            <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
+              <input
+                type="text"
+                id="player-name-input"
+                maxlength="12"
+                placeholder="Enter name..."
+                style="
+                  flex:1; padding: 10px 12px;
+                  font-family: 'Press Start 2P', monospace; font-size: 9px;
+                  background: #1a1a2e; color: #fbc531;
+                  border: 2px solid #fbc531; border-radius: 4px;
+                  outline: none; text-align: center; letter-spacing: 2px;
+                  text-transform: uppercase;
+                "
+              >
+              <button id="btn-enter-arena" class="retry-btn" style="
+                margin: 0; padding: 10px 14px; font-size: 9px;
+                background: linear-gradient(135deg, #e1b12c, #f9ca24);
+                color: #1a1a2e; border: none; white-space: nowrap;
+              ">⚔️ ENTER</button>
+            </div>
+          </div>
+
+          <div id="lobby-sub" class="game-over-sub" style="margin-bottom: 20px; display:none;">Connecting to WebRTC...</div>
           
           <div id="lobby-host-ui" style="display: none; width: 100%;">
             <p style="font-size: 10px; color: #aaa; margin-bottom: 8px;">Share this link to invite a friend:</p>
@@ -83,7 +110,7 @@
           </div>
           
           <!-- Made universally visible for fallbacks -->
-          <button id="btn-play-offline" class="retry-btn" style="margin-top: 20px; background: #666; width:auto; font-size:10px;">Play Singleplayer Offline</button>
+          <button id="btn-play-offline" class="retry-btn" style="margin-top: 20px; background: #666; width:auto; font-size:10px; display:none;">Play Singleplayer Offline</button>
         </div>
       </div>
 
