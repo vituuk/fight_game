@@ -43,7 +43,7 @@ class NetworkManager {
         // CLIENT MODE
         this.role = NetworkRole.CLIENT;
         console.log('Connecting to host: ' + targetId);
-        this.hostConn = this.peer.connect(targetId, { reliable: false }); 
+        this.hostConn = this.peer.connect(targetId, { reliable: true }); 
         this._setupClientConnection(this.hostConn);
       } else {
         // HOST MODE

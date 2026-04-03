@@ -1066,7 +1066,12 @@ function animate() {
         if (player.health <= 0 || allRemotesDead) {
           const hostWon = player.health > 0;
           gameActive = false;
-          network.send({ type: 'round_result', hostWon });
+          // Send round_result 3× with increasing delays — guarantees CLIENT receives it
+          // even if the first packet is dropped on an unreliable channel
+          const rr = { type: 'round_result', hostWon };
+          network.send(rr);
+          setTimeout(() => network.send(rr), 200);
+          setTimeout(() => network.send(rr), 600);
           game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
           game.displayText.style.display = 'block';
           setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2500);
@@ -1437,11 +1442,14 @@ function setupLobby() {
       }
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
+       if (network._roundResultHandled) return; // ignore duplicate sends
+       network._roundResultHandled = true;
        gameActive = false;
        game.displayText.textContent = payload.hostWon ? 'You Lose...' : 'You Win! 🏆';
        game.displayText.style.display = 'block';
        setTimeout(() => {
          game.displayText.style.display = 'none';
+         network._roundResultHandled = false; // reset for next round
          resetRound(false);
        }, 2000);
     }
