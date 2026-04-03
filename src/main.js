@@ -1038,6 +1038,11 @@ function animate() {
               if (firstId && victim === remotePlayers[firstId]) {
                 game.p2HealthBar.style.width = victim.health + '%';
               }
+
+            } else if (network.role === NetworkRole.CLIENT && attacker === player) {
+              // CLIENT hit a remote player — report to HOST so it can apply damage authoritatively
+              // (HOST can't reliably detect CLIENT→HOST collisions due to network lag)
+              network.send({ type: 'hit_report', dmg });
             }
             // CLIENT: sparks shown above; authoritative HP comes back via host_sync clientHp
 
@@ -1308,6 +1313,26 @@ function setupLobby() {
       }
       // Update position/animation — HOST owns health, so skipHp=true
       applyPlayerData(remotePlayers[peerId], cd, true);
+
+    // ── HOST receives a hit report from CLIENT ─────────────────────────────
+    } else if (network.role === NetworkRole.HOST && payload.type === 'hit_report') {
+      const dmg = payload.dmg;
+      const now = performance.now();
+      // Per-peer cooldown to prevent the same attack registering multiple frames
+      if (!network._hitCooldown) network._hitCooldown = {};
+      const lastHit = network._hitCooldown[peerId] || 0;
+      if (typeof dmg === 'number' && dmg > 0 && !player.isDead && gameActive && (now - lastHit) > 350) {
+        network._hitCooldown[peerId] = now;
+        player.takeHit(dmg);
+        game.p1HealthBar.style.width = player.health + '%';
+        // Visual feedback for HOST
+        const hx = player.position.x + CHAR_W / 2;
+        const hy = player.position.y + CHAR_H * 0.4;
+        createHitSparks(hx, hy);
+        player._hitFlash = 12;
+        if (typeof player._setState === 'function') player._setState('hurt');
+        if (typeof player._squash  === 'function') player._squash(0.85, 1.25);
+      }
 
     // ── CLIENT receives full game state from HOST ───────────────────────────
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_sync') {
