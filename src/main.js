@@ -1066,21 +1066,28 @@ function animate() {
         if (player.health <= 0 || allRemotesDead) {
           const hostWon = player.health > 0;
           gameActive = false;
-          // Send round_result 3× with increasing delays — guarantees CLIENT receives it
-          // even if the first packet is dropped on an unreliable channel
+          // Broadcast round result 3× for reliability
           const rr = { type: 'round_result', hostWon };
           network.send(rr);
           setTimeout(() => network.send(rr), 200);
           setTimeout(() => network.send(rr), 600);
           game.displayText.textContent = hostWon ? 'You Win! 🏆' : 'You Lose...';
           game.displayText.style.display = 'block';
-          setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2500);
+          setTimeout(() => {
+            game.displayText.style.display = 'none';
+            // ── Stage progression (same as offline mode) ──────────────────
+            const next = currentStageIdx + 1;
+            if (next < STAGES.length) {
+              goToStage(next);          // walk to next stage
+            } else {
+              showVictory();            // all stages cleared!
+            }
+          }, 2500);
         }
       }
     } else if (network.role === NetworkRole.CLIENT) {
-      // CLIENT-side win detection — uses HP data already synced every frame via host_sync
-      // This is independent of the round_result message, so a dropped packet never causes the
-      // "You Win!" screen to be missed.
+      // CLIENT-side win/lose detection — driven by HP data synced every frame via host_sync.
+      // CLIENT does NOT call resetRound/goToStage itself — it follows HOST's stageIdx via host_sync.
       const hostAvatar = remotePlayers['__host__'];
       if (hostAvatar && hostAvatar.health <= 0 && !network._roundResultHandled) {
         network._roundResultHandled = true;
@@ -1090,10 +1097,9 @@ function animate() {
         setTimeout(() => {
           game.displayText.style.display = 'none';
           network._roundResultHandled = false;
-          resetRound(false);
-        }, 2000);
+          // HOST will trigger goToStage via host_sync — don't resetRound here
+        }, 2500);
       } else if (player.isDead && !network._roundResultHandled) {
-        // CLIENT knows their own death from clientHp — show lose screen too
         network._roundResultHandled = true;
         gameActive = false;
         game.displayText.textContent = 'You Lose...';
@@ -1101,11 +1107,11 @@ function animate() {
         setTimeout(() => {
           game.displayText.style.display = 'none';
           network._roundResultHandled = false;
-          resetRound(false);
-        }, 2000);
+          // HOST will trigger goToStage via host_sync — don't resetRound here
+        }, 2500);
       }
     }
-    // CLIENT win condition handled via round_result message from HOST (backup)
+    // CLIENT stage advancement driven by host_sync stageIdx (see handler below)
   }
 
   // ── Network Broadcast ────────────────────────────────────────────────────
@@ -1451,6 +1457,16 @@ function setupLobby() {
         applyPlayerData(remotePlayers[clientId], d.clients[clientId]);
       });
 
+      // ── CLIENT follows HOST stage progression ─────────────────────────────
+      // When HOST advances to next stage (stageIdx changes in host_sync),
+      // CLIENT kicks off its own goToStage() walk-out/walk-in animation.
+      if (typeof d.stageIdx === 'number' &&
+          d.stageIdx !== currentStageIdx &&
+          !isTransitioning &&
+          !network._roundResultHandled) {
+        goToStage(d.stageIdx);
+      }
+
 
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'host_hp') {
@@ -1469,16 +1485,16 @@ function setupLobby() {
       }
 
     } else if (network.role === NetworkRole.CLIENT && payload.type === 'round_result') {
-       if (network._roundResultHandled) return; // ignore duplicate sends
+       if (network._roundResultHandled) return; // ignore duplicates
        network._roundResultHandled = true;
        gameActive = false;
        game.displayText.textContent = payload.hostWon ? 'You Lose...' : 'You Win! 🏆';
        game.displayText.style.display = 'block';
        setTimeout(() => {
          game.displayText.style.display = 'none';
-         network._roundResultHandled = false; // reset for next round
-         resetRound(false);
-       }, 2000);
+         network._roundResultHandled = false;
+         // HOST drives stage progression via host_sync stageIdx — don't call resetRound here
+       }, 2500);
     }
   };
 
