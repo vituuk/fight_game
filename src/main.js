@@ -1077,8 +1077,35 @@ function animate() {
           setTimeout(() => { game.displayText.style.display = 'none'; resetRound(false); }, 2500);
         }
       }
+    } else if (network.role === NetworkRole.CLIENT) {
+      // CLIENT-side win detection — uses HP data already synced every frame via host_sync
+      // This is independent of the round_result message, so a dropped packet never causes the
+      // "You Win!" screen to be missed.
+      const hostAvatar = remotePlayers['__host__'];
+      if (hostAvatar && hostAvatar.health <= 0 && !network._roundResultHandled) {
+        network._roundResultHandled = true;
+        gameActive = false;
+        game.displayText.textContent = 'You Win! 🏆';
+        game.displayText.style.display = 'block';
+        setTimeout(() => {
+          game.displayText.style.display = 'none';
+          network._roundResultHandled = false;
+          resetRound(false);
+        }, 2000);
+      } else if (player.isDead && !network._roundResultHandled) {
+        // CLIENT knows their own death from clientHp — show lose screen too
+        network._roundResultHandled = true;
+        gameActive = false;
+        game.displayText.textContent = 'You Lose...';
+        game.displayText.style.display = 'block';
+        setTimeout(() => {
+          game.displayText.style.display = 'none';
+          network._roundResultHandled = false;
+          resetRound(false);
+        }, 2000);
+      }
     }
-    // CLIENT win condition handled via round_result message from HOST
+    // CLIENT win condition handled via round_result message from HOST (backup)
   }
 
   // ── Network Broadcast ────────────────────────────────────────────────────
