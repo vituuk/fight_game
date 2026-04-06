@@ -2,6 +2,53 @@ import { Player } from './classes/Player.js';
 import { rectangularCollision, determineWinner } from './utils/collision.js';
 import { network, NetworkRole } from './network.js';
 
+// ─── Mobile Responsive Scaling ───────────────────────────────────────────────
+const GAME_W = 1024;
+const GAME_H = 576;
+
+function scaleGame() {
+  const container = document.getElementById('game-container');
+  const guide     = document.getElementById('keyboard-guide');
+  if (!container) return;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // On touch/mobile, we want to use as much screen space as possible.
+  // Reserve a little room for the keyboard guide on desktop only.
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const reserveY = isTouchDevice ? 0 : 50; // px to leave below for keyboard guide
+
+  const scaleX = vw / GAME_W;
+  const scaleY = (vh - reserveY) / GAME_H;
+  const scale  = Math.min(scaleX, scaleY, 1); // never upscale above 100%
+
+  container.style.transform = `scale(${scale})`;
+  container.style.transformOrigin = 'top center';
+
+  // Adjust body layout so container sits top-aligned when scaled
+  // (prevents white-space gap when scaled down)
+  const scaledH = GAME_H * scale;
+  document.body.style.justifyContent = scaledH < vh ? 'center' : 'flex-start';
+
+  if (guide) {
+    guide.style.display = isTouchDevice ? 'none' : 'block';
+  }
+}
+
+// Detect touch capability and tag body
+(function detectTouchDevice() {
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    document.body.classList.add('touch-device');
+  }
+})();
+
+scaleGame();
+window.addEventListener('resize', scaleGame);
+// iOS fires 'orientationchange' for rotations
+window.addEventListener('orientationchange', () => setTimeout(scaleGame, 150));
+
+
 // ─── Particle System ─────────────────────────────────────────────────────────
 /**
  * Spark types:

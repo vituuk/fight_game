@@ -6,6 +6,8 @@
   font-family: 'Press Start 2P', cursive;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 
 body {
@@ -16,6 +18,11 @@ body {
   align-items: center;
   min-height: 100vh;
   overflow: hidden;
+  /* Prevent iOS bounce/overscroll */
+  overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
+  height: 100%;
 }
 
 /* ─── Game Container ──────────────────────────────────────── */
@@ -26,6 +33,9 @@ body {
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 0 60px rgba(0,0,0,0.9), 0 0 0 3px #fbc531;
+  /* Scale to fit viewport while maintaining 16:9 */
+  transform-origin: top center;
+  flex-shrink: 0;
 }
 
 /* ─── Canvas – bottom layer ───────────────────────────────── */
@@ -356,8 +366,63 @@ body {
   text-align: center;
   letter-spacing: 0.5px;
   line-height: 1.8;
+  flex-shrink: 0;
 }
 #keyboard-guide b { color: #fbc531; }
+
+/* ─── Mobile / Touch Responsive ──────────────────────────── */
+
+/* On touch devices: always show controls overlay */
+.touch-device #controls-overlay {
+  display: flex !important;
+}
+
+/* Hide keyboard guide on touch devices */
+.touch-device #keyboard-guide {
+  display: none !important;
+}
+
+/* Landscape phone: make controls a bit smaller */
+@media (max-height: 500px) and (orientation: landscape) {
+  .dpad-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 18px;
+  }
+  .action-btn {
+    width: 56px;
+    height: 56px;
+  }
+  .btn-attack {
+    width: 68px;
+    height: 68px;
+    font-size: 28px;
+  }
+  #controls-overlay {
+    padding: 0 18px 16px;
+  }
+}
+
+/* Portrait phone: stack controls tighter */
+@media (orientation: portrait) and (max-width: 600px) {
+  .dpad-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+  .action-btn {
+    width: 64px;
+    height: 64px;
+  }
+  .btn-attack {
+    width: 76px;
+    height: 76px;
+    font-size: 32px;
+  }
+  #controls-overlay {
+    padding: 0 20px 22px;
+  }
+}
 
 /* ─── Stage HUD badge ─────────────────────────────────────── */
 #stage-badge {
