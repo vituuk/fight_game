@@ -6,8 +6,20 @@ import { network, NetworkRole } from './network.js';
 const GAME_W = 1024;
 const GAME_H = 576;
 
-const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-if (IS_TOUCH) document.body.classList.add('touch-device');
+// Check both touch hardware AND small screen (covers DevTools simulation)
+function isMobileDevice() {
+  return ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+      || window.innerWidth <= 768;
+}
+
+function updateTouchClass() {
+  if (isMobileDevice()) {
+    document.body.classList.add('touch-device');
+  } else {
+    document.body.classList.remove('touch-device');
+  }
+}
+updateTouchClass();
 
 function scaleGame() {
   const container = document.getElementById('game-container');
@@ -18,6 +30,10 @@ function scaleGame() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
+  // Re-check on every resize (handles DevTools simulation toggling)
+  updateTouchClass();
+  const isM = isMobileDevice();
+
   // Scale to fill screen, never upscale beyond native 1024×576
   const scale = Math.min(vw / GAME_W, vh / GAME_H, 1);
 
@@ -27,8 +43,8 @@ function scaleGame() {
   container.style.left = Math.round((vw - GAME_W * scale) / 2) + 'px';
   container.style.top  = Math.round((vh - GAME_H * scale) / 2) + 'px';
 
-  if (guide) guide.style.display = IS_TOUCH ? 'none' : 'block';
-  if (!IS_TOUCH || !overlay) return;
+  if (guide) guide.style.display = 'block'; // always show keyboard guide
+  if (!overlay) return;
 
   // ── Button sizing ──────────────────────────────────────────────────────────
   //

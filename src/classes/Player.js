@@ -341,9 +341,9 @@ export class Player {
           angle = Math.PI * 0.3;
           tx = 20; ty = -this.height * 0.25;
         } else {
-          // idle: gentle sway
-          angle = -Math.PI * 0.28 + Math.sin(t * 1.2) * 0.06;
-          ty    = -this.height * 0.62 + Math.sin(t * 1.2) * 2;
+          // idle: sword held steady in ready position
+          angle = -Math.PI * 0.28;
+          ty    = -this.height * 0.62;
         }
 
         // Glow when actively attacking
@@ -592,8 +592,10 @@ export class Player {
 
     switch (this._state) {
       case 'idle':
-        offsetY   = Math.sin(t * 1.2) * 3;
-        bobScaleY = 1 + Math.sin(t * 1.2) * 0.015;
+        // Stand perfectly still — no bob, no sway
+        offsetY   = 0;
+        bobScaleY = 1;
+        tiltAngle = 0;
         break;
       case 'run': {
         const c = Math.sin(t * 3.5);

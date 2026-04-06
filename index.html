@@ -120,36 +120,49 @@
       <!-- LAYER 6: Touch Controls (absolute, inside game-container, overlays game) -->
       <div id="controls-overlay">
 
-        <!-- LEFT: D-Pad -->
+        <!-- LEFT: D-Pad with key labels -->
         <div class="dpad-wrap">
-          <button id="btn-up"    class="dpad-btn dpad-up">↑</button>
+          <button id="btn-up" class="dpad-btn dpad-up">
+            <span class="dpad-arrow">↑</span>
+            <span class="btn-key">W</span>
+          </button>
           <div class="dpad-row">
-            <button id="btn-left"  class="dpad-btn dpad-left">←</button>
+            <button id="btn-left" class="dpad-btn dpad-left">
+              <span class="dpad-arrow">←</span>
+              <span class="btn-key">A</span>
+            </button>
             <div class="dpad-center"></div>
-            <button id="btn-right" class="dpad-btn dpad-right">→</button>
+            <button id="btn-right" class="dpad-btn dpad-right">
+              <span class="dpad-arrow">→</span>
+              <span class="btn-key">D</span>
+            </button>
           </div>
         </div>
 
-        <!-- RIGHT: Action buttons -->
+        <!-- RIGHT: Action buttons with icon + key label -->
         <div class="action-wrap">
           <div class="action-row">
-            <button id="btn-kick"    class="action-btn btn-kick"    title="Sword Strike (K)">
+            <button id="btn-kick" class="action-btn btn-kick" title="Sword Strike (K)">
               <span class="btn-icon">⚔️</span>
               <span class="btn-label">Sword</span>
+              <span class="btn-key">K</span>
             </button>
-            <button id="btn-shield"  class="action-btn btn-shield"  title="Shield (S)">
+            <button id="btn-shield" class="action-btn btn-shield" title="Shield (S)">
               <span class="btn-icon">🛡️</span>
               <span class="btn-label">Shield</span>
+              <span class="btn-key">S</span>
             </button>
           </div>
           <div class="action-row">
             <button id="btn-special" class="action-btn btn-special" title="Skill (Q)">
               <span class="btn-icon">✨</span>
               <span class="btn-label">Skill</span>
+              <span class="btn-key">Q</span>
             </button>
-            <button id="btn-attack"  class="action-btn btn-attack"  title="Attack (Space)">
+            <button id="btn-attack" class="action-btn btn-attack" title="Attack (Space)">
               <span class="btn-icon">👊</span>
               <span class="btn-label">Attack</span>
+              <span class="btn-key">SPC</span>
             </button>
           </div>
         </div>
@@ -160,7 +173,19 @@
 
     <!-- Keyboard guide – desktop only, hidden on touch -->
     <div id="keyboard-guide">
-      <span>⌨️ <b>WASD</b> Move/Jump&nbsp;&nbsp;|&nbsp;&nbsp;<b>Space</b> Attack&nbsp;&nbsp;|&nbsp;&nbsp;<b>K</b> Sword Strike&nbsp;&nbsp;|&nbsp;&nbsp;<b>Q</b> Skill&nbsp;&nbsp;|&nbsp;&nbsp;<b>S (hold)</b> Shield</span>
+      <span class="key-item">⬅️ <b>A</b> Left</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">➡️ <b>D</b> Right</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">⬆️ <b>W</b> Jump</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">👊 <b>Space</b> Attack</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">⚔️ <b>K</b> Sword</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">🛡️ <b>S</b> Shield</span>
+      <span class="key-sep">|</span>
+      <span class="key-item">✨ <b>Q</b> Skill</span>
     </div>
 
     <script type="module" src="/src/main.js"></script>

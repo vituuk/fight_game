@@ -12,6 +12,10 @@
 
 body {
   background: #0d0d0d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   overscroll-behavior: none;
   position: fixed;
@@ -198,7 +202,7 @@ body {
   left: 0;
   width: 100%;
   z-index: 5;
-  display: none;           /* hidden on desktop */
+  display: flex;           /* always visible on all devices */
   justify-content: space-between;
   align-items: flex-end;
   pointer-events: none;    /* passthrough; children re-enable */
@@ -206,12 +210,9 @@ body {
   box-sizing: border-box;
 }
 
-/* Show on touch devices */
-.touch-device #controls-overlay {
-  display: flex;
-}
-.touch-device #keyboard-guide {
-  display: none !important;
+/* Keyboard guide — always visible so desktop players know the keys */
+#keyboard-guide {
+  display: block;
 }
 
 /* ── D-pad ── */
@@ -240,13 +241,20 @@ body {
   border-radius: 14px;
   color: #fff;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 1px;
   cursor: pointer;
+  position: relative;           /* anchors key badge */
   transition: background 0.08s, transform 0.08s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   box-shadow: 0 4px 18px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.dpad-arrow {
+  font-size: var(--dpad-f, 20px);
+  line-height: 1;
 }
 .dpad-btn:active,
 .dpad-btn.active {
@@ -291,6 +299,30 @@ body {
   color: rgba(255,255,255,0.85);
   text-transform: uppercase;
   font-family: 'Press Start 2P', cursive;
+}
+/* Key badge shown on every button */
+.btn-key {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  background: rgba(251,197,49,0.92);
+  color: #111;
+  font-size: var(--label-f, 6px);
+  font-family: 'Press Start 2P', cursive;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 0 0 50% 0;
+  border-top-left-radius: 4px;
+  line-height: 1.4;
+  pointer-events: none;
+  min-width: 14px;
+  text-align: center;
+}
+.dpad-btn .btn-key {
+  border-radius: 3px 0 3px 0;
+  bottom: 1px;
+  right: 2px;
+  font-size: var(--label-f, 6px);
 }
 .action-btn:active,
 .action-btn.active {
@@ -355,16 +387,42 @@ body {
 
 /* ─── Keyboard guide (below the game, desktop only) ────── */
 #keyboard-guide {
-  margin-top: 14px;
-  color: rgba(255,255,255,0.55);
-  font-size: 9px;
-  text-align: center;
-  letter-spacing: 0.5px;
-  line-height: 1.8;
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 4px;
+  padding: 6px 12px;
   flex-shrink: 0;
 }
-#keyboard-guide b { color: #fbc531; }
-.touch-device #keyboard-guide { display: none !important; }
+#keyboard-guide b {
+  color: #fbc531;
+}
+.key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 8px;
+  color: rgba(255,255,255,0.8);
+  white-space: nowrap;
+}
+.key-item b {
+  background: rgba(251,197,49,0.18);
+  border: 1px solid #fbc531;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #fbc531;
+  font-size: 8px;
+}
+.key-sep {
+  color: rgba(255,255,255,0.2);
+  font-size: 10px;
+}
 
 /* ─── Stage HUD badge ─────────────────────────────────────── */
 #stage-badge {
