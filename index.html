@@ -5,7 +5,6 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="2D Browser Fighting Game - Battle the AI with punches, kicks, and special moves!" />
-    <!-- Mobile web-app / PWA appearance -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,7 +17,7 @@
   </head>
   <body>
     <div id="game-container">
-      
+
       <!-- LAYER 1.5: Hero Selection -->
       <div id="hero-selection" class="hero-selection">
         <span class="hero-label">HERO:</span>
@@ -114,12 +113,11 @@
             <button id="btn-copy" class="retry-btn" style="background: #e1b12c;">📋 COPY LINK</button>
           </div>
           
-          <!-- Made universally visible for fallbacks -->
           <button id="btn-play-offline" class="retry-btn" style="margin-top: 20px; background: #666; width:auto; font-size:10px; display:none;">Play Singleplayer Offline</button>
         </div>
       </div>
 
-      <!-- LAYER 6: Controls (top, pointer-events enabled on buttons only) -->
+      <!-- LAYER 6: Touch Controls (absolute, inside game-container, overlays game) -->
       <div id="controls-overlay">
 
         <!-- LEFT: D-Pad -->
@@ -132,9 +130,8 @@
           </div>
         </div>
 
-        <!-- RIGHT: Action buttons with weapon names -->
+        <!-- RIGHT: Action buttons -->
         <div class="action-wrap">
-          <!-- Top row -->
           <div class="action-row">
             <button id="btn-kick"    class="action-btn btn-kick"    title="Sword Strike (K)">
               <span class="btn-icon">⚔️</span>
@@ -145,7 +142,6 @@
               <span class="btn-label">Shield</span>
             </button>
           </div>
-          <!-- Bottom row -->
           <div class="action-row">
             <button id="btn-special" class="action-btn btn-special" title="Skill (Q)">
               <span class="btn-icon">✨</span>
@@ -160,9 +156,9 @@
 
       </div>
 
-    </div>
+    </div><!-- end #game-container -->
 
-    <!-- controls guide -->
+    <!-- Keyboard guide – desktop only, hidden on touch -->
     <div id="keyboard-guide">
       <span>⌨️ <b>WASD</b> Move/Jump&nbsp;&nbsp;|&nbsp;&nbsp;<b>Space</b> Attack&nbsp;&nbsp;|&nbsp;&nbsp;<b>K</b> Sword Strike&nbsp;&nbsp;|&nbsp;&nbsp;<b>Q</b> Skill&nbsp;&nbsp;|&nbsp;&nbsp;<b>S (hold)</b> Shield</span>
     </div>

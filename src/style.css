@@ -12,13 +12,7 @@
 
 body {
   background: #0d0d0d;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
   overflow: hidden;
-  /* Prevent iOS bounce/overscroll */
   overscroll-behavior: none;
   position: fixed;
   width: 100%;
@@ -27,15 +21,17 @@ body {
 
 /* ─── Game Container ──────────────────────────────────────── */
 #game-container {
-  position: relative;
+  position: absolute;  /* JS sets top/left to center it */
+  /* Fallback centering before JS runs */
+  top: 50%;
+  left: 50%;
   width: 1024px;
   height: 576px;
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 0 60px rgba(0,0,0,0.9), 0 0 0 3px #fbc531;
-  /* Scale to fit viewport while maintaining 16:9 */
-  transform-origin: top center;
-  flex-shrink: 0;
+  transform: translate(-50%, -50%);
+  transform-origin: top left;
 }
 
 /* ─── Canvas – bottom layer ───────────────────────────────── */
@@ -195,49 +191,54 @@ body {
   pointer-events: none;
 }
 
-/* ─── Controls overlay – TOP layer, transparent ──────────── */
+/* ─── Controls overlay – absolute inside container, overlays game bottom ─── */
 #controls-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 200px;               /* only the bottom portion */
   z-index: 5;
-  pointer-events: none;        /* transparent by default  */
-  display: flex;
+  display: none;           /* hidden on desktop */
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 30px 28px;
+  pointer-events: none;    /* passthrough; children re-enable */
+  background: linear-gradient(transparent, rgba(0,0,0,0.55));
+  box-sizing: border-box;
 }
 
-/* ── D-Pad ── */
+/* Show on touch devices */
+.touch-device #controls-overlay {
+  display: flex;
+}
+.touch-device #keyboard-guide {
+  display: none !important;
+}
+
+/* ── D-pad ── */
 .dpad-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--ctrl-gap, 8px);
   pointer-events: auto;
 }
-
 .dpad-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--ctrl-gap, 8px);
 }
-
 .dpad-center {
-  width: 48px;
-  height: 48px;
+  width:  var(--dpad-sz, 52px);
+  height: var(--dpad-sz, 52px);
 }
-
 .dpad-btn {
-  width: 52px;
-  height: 52px;
-  background: rgba(28, 28, 50, 0.82);
-  border: 2px solid rgba(255,255,255,0.35);
-  border-radius: 10px;
+  width:       var(--dpad-sz, 64px);
+  height:      var(--dpad-sz, 64px);
+  font-size:   var(--dpad-f,  26px);
+  background: rgba(20, 20, 50, 0.88);
+  border: 2px solid rgba(255,255,255,0.45);
+  border-radius: 14px;
   color: #fff;
-  font-size: 22px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -245,8 +246,8 @@ body {
   transition: background 0.08s, transform 0.08s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1);
 }
-
 .dpad-btn:active,
 .dpad-btn.active {
   background: #fbc531;
@@ -258,19 +259,17 @@ body {
 .action-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--ctrl-gap, 8px);
   pointer-events: auto;
 }
-
 .action-row {
   display: flex;
-  gap: 10px;
+  gap: var(--ctrl-gap, 8px);
   justify-content: flex-end;
 }
-
 .action-btn {
-  width: 68px;
-  height: 68px;
+  width:  var(--action-sz, 72px);
+  height: var(--action-sz, 72px);
   border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.45);
   display: flex;
@@ -283,25 +282,22 @@ body {
   transition: transform 0.08s, filter 0.08s, box-shadow 0.08s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  position: relative;
 }
-
-.btn-icon  { font-size: 22px; line-height: 1; }
+.btn-icon  { font-size: var(--action-f,  26px); line-height: 1; }
 .btn-label {
-  font-size: 6px;
+  font-size: var(--label-f, 6px);
   letter-spacing: 0.5px;
   color: rgba(255,255,255,0.85);
   text-transform: uppercase;
   font-family: 'Press Start 2P', cursive;
 }
-
 .action-btn:active,
 .action-btn.active {
   transform: scale(0.82);
   filter: brightness(1.9);
   box-shadow: 0 0 24px currentColor;
 }
-
-/* ── Equipped / selected skill highlight ── */
 .action-btn.equipped {
   outline: 3px solid #fff;
   outline-offset: 3px;
@@ -327,38 +323,37 @@ body {
   font-weight: bold;
   box-shadow: 0 0 6px rgba(0,0,0,0.5);
 }
-/* Make buttons relative so ::after positions correctly */
-.action-btn { position: relative; }
-
-/* Sword – blue steel */
+/* Sword */
 .btn-kick {
   background: radial-gradient(circle at 35% 35%, #42a5f5, #0d47a1);
   border-color: #90caf9;
   box-shadow: 0 0 14px rgba(66,165,245,0.55);
 }
-/* Shield – violet */
+/* Shield */
 .btn-shield {
   background: radial-gradient(circle at 35% 35%, #ab47bc, #4a148c);
   border-color: #ce93d8;
   box-shadow: 0 0 14px rgba(171,71,188,0.55);
 }
-/* Skill – golden */
+/* Skill */
 .btn-special {
   background: radial-gradient(circle at 35% 35%, #ffa726, #e65100);
   border-color: #ffcc80;
   box-shadow: 0 0 14px rgba(255,167,38,0.55);
 }
-/* Attack – green */
+/* Attack – bigger */
 .btn-attack {
-  width: 82px;
-  height: 82px;
-  font-size: 36px;
+  width:     var(--attack-sz, 86px);
+  height:    var(--attack-sz, 86px);
+  font-size: var(--attack-f,  38px);
   background: radial-gradient(circle at 35% 35%, #66bb6a, #1b5e20);
   border-color: #a5d6a7;
   box-shadow: 0 0 20px rgba(102,187,106,0.7);
 }
 
-/* ─── Keyboard guide (below the game) ────────────────────── */
+
+
+/* ─── Keyboard guide (below the game, desktop only) ────── */
 #keyboard-guide {
   margin-top: 14px;
   color: rgba(255,255,255,0.55);
@@ -369,60 +364,7 @@ body {
   flex-shrink: 0;
 }
 #keyboard-guide b { color: #fbc531; }
-
-/* ─── Mobile / Touch Responsive ──────────────────────────── */
-
-/* On touch devices: always show controls overlay */
-.touch-device #controls-overlay {
-  display: flex !important;
-}
-
-/* Hide keyboard guide on touch devices */
-.touch-device #keyboard-guide {
-  display: none !important;
-}
-
-/* Landscape phone: make controls a bit smaller */
-@media (max-height: 500px) and (orientation: landscape) {
-  .dpad-btn {
-    width: 42px;
-    height: 42px;
-    font-size: 18px;
-  }
-  .action-btn {
-    width: 56px;
-    height: 56px;
-  }
-  .btn-attack {
-    width: 68px;
-    height: 68px;
-    font-size: 28px;
-  }
-  #controls-overlay {
-    padding: 0 18px 16px;
-  }
-}
-
-/* Portrait phone: stack controls tighter */
-@media (orientation: portrait) and (max-width: 600px) {
-  .dpad-btn {
-    width: 56px;
-    height: 56px;
-    font-size: 24px;
-  }
-  .action-btn {
-    width: 64px;
-    height: 64px;
-  }
-  .btn-attack {
-    width: 76px;
-    height: 76px;
-    font-size: 32px;
-  }
-  #controls-overlay {
-    padding: 0 20px 22px;
-  }
-}
+.touch-device #keyboard-guide { display: none !important; }
 
 /* ─── Stage HUD badge ─────────────────────────────────────── */
 #stage-badge {

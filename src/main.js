@@ -6,47 +6,76 @@ import { network, NetworkRole } from './network.js';
 const GAME_W = 1024;
 const GAME_H = 576;
 
+const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+if (IS_TOUCH) document.body.classList.add('touch-device');
+
 function scaleGame() {
   const container = document.getElementById('game-container');
+  const overlay   = document.getElementById('controls-overlay');
   const guide     = document.getElementById('keyboard-guide');
   if (!container) return;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // On touch/mobile, we want to use as much screen space as possible.
-  // Reserve a little room for the keyboard guide on desktop only.
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const reserveY = isTouchDevice ? 0 : 50; // px to leave below for keyboard guide
+  // Scale to fill screen, never upscale beyond native 1024×576
+  const scale = Math.min(vw / GAME_W, vh / GAME_H, 1);
 
-  const scaleX = vw / GAME_W;
-  const scaleY = (vh - reserveY) / GAME_H;
-  const scale  = Math.min(scaleX, scaleY, 1); // never upscale above 100%
+  // Centre the container using top/left (transform-origin: top left)
+  container.style.transform      = `scale(${scale})`;
+  container.style.transformOrigin = 'top left';
+  container.style.left = Math.round((vw - GAME_W * scale) / 2) + 'px';
+  container.style.top  = Math.round((vh - GAME_H * scale) / 2) + 'px';
 
-  container.style.transform = `scale(${scale})`;
-  container.style.transformOrigin = 'top center';
+  if (guide) guide.style.display = IS_TOUCH ? 'none' : 'block';
+  if (!IS_TOUCH || !overlay) return;
 
-  // Adjust body layout so container sits top-aligned when scaled
-  // (prevents white-space gap when scaled down)
-  const scaledH = GAME_H * scale;
-  document.body.style.justifyContent = scaledH < vh ? 'center' : 'flex-start';
+  // ── Button sizing ──────────────────────────────────────────────────────────
+  //
+  // We want buttons that feel LARGE on any phone.
+  // Controls live inside the canvas (position:absolute bottom:0).
+  // After CSS scale the canvas px are multiplied by `scale`.
+  //
+  // Formula: canvasPx = desiredScreenPx / scale
+  //
+  // Overlay height = max(120px real, 45% of rendered game height)
+  // capped so it never exceeds 50% of GAME_H canvas pixels.
 
-  if (guide) {
-    guide.style.display = isTouchDevice ? 'none' : 'block';
-  }
+  const renderedH    = GAME_H * scale;                         // game height on screen
+  const wantScreenPx = Math.max(80, renderedH * 0.30);        // at least 80px on screen
+  const overlayCP    = Math.min(                               // canvas pixels
+    Math.round(wantScreenPx / scale),
+    Math.round(GAME_H * 0.35)                                  // cap at 35% of game height
+  );
+
+  // Inner available height after vertical padding (8% each side)
+  const padCP  = Math.round(overlayCP * 0.08);
+  const gapCP  = Math.round(overlayCP * 0.08);
+  const rowCP  = Math.round((overlayCP - padCP * 2 - gapCP) / 2); // height per button row
+
+  // Sizes: each button fills one row; attack is 20% bigger than normal action
+  const cpDpad   = rowCP;
+  const cpAction = rowCP;
+  const cpAttack = Math.round(rowCP * 1.18);
+
+  const r = document.documentElement.style;
+  r.setProperty('--dpad-sz',   cpDpad   + 'px');
+  r.setProperty('--action-sz', cpAction + 'px');
+  r.setProperty('--attack-sz', cpAttack + 'px');
+  r.setProperty('--ctrl-gap',  gapCP    + 'px');
+  r.setProperty('--dpad-f',   Math.round(cpDpad   * 0.44) + 'px');
+  r.setProperty('--action-f', Math.round(cpAction * 0.40) + 'px');
+  r.setProperty('--attack-f', Math.round(cpAttack * 0.44) + 'px');
+  r.setProperty('--label-f',  Math.round(cpAction * 0.09) + 'px');
+
+  overlay.style.height  = overlayCP + 'px';
+  overlay.style.padding = `${padCP}px ${Math.round(GAME_W * 0.025)}px`;
 }
-
-// Detect touch capability and tag body
-(function detectTouchDevice() {
-  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-    document.body.classList.add('touch-device');
-  }
-})();
 
 scaleGame();
 window.addEventListener('resize', scaleGame);
-// iOS fires 'orientationchange' for rotations
-window.addEventListener('orientationchange', () => setTimeout(scaleGame, 150));
+window.addEventListener('orientationchange', () => setTimeout(scaleGame, 200));
+
 
 
 // ─── Particle System ─────────────────────────────────────────────────────────
