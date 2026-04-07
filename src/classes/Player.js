@@ -1,3 +1,5 @@
+import { Sound } from '../sound.js';
+
 /**
  * Player.js  – Sprite-image based fighter with EQUIP / HOLD system
  *
@@ -104,11 +106,16 @@ export class Player {
     if (this.isDead || this.isAttacking) return;
     this.isAttacking = true;
     this._setState('punch');
-    this._squash(1.3, 0.75);
+    // Anticipation pull back, then fast snap forward
+    Sound.playSwordSwing();
+    this._squash(0.8, 1.1); 
     setTimeout(() => {
-      this.isAttacking = false;
-      if (this._state === 'punch') this._setState('idle');
-    }, 350);
+      this._squash(1.4, 0.7); // The strike stretch
+      setTimeout(() => {
+        this.isAttacking = false;
+        if (this._state === 'punch') this._setState('idle');
+      }, 250);
+    }, 100);
   }
 
   /** Sword-strike — lunges forward with longer reach */
@@ -117,21 +124,41 @@ export class Player {
     this.isKnifeAttacking = true;
     this.attackBox.width = 165;
     this._setState('kick');
-    this._squash(0.8, 1.2);
+    // Huge windup stretch
+    Sound.playSwordSwing();
+    this._squash(0.6, 1.3);
     setTimeout(() => {
-      this.isKnifeAttacking = false;
-      this.attackBox.width  = 130;
-      if (this._state === 'kick') this._setState('idle');
-    }, 420);
+      // Big lunge forward
+      this._squash(1.5, 0.75);
+      setTimeout(() => {
+        this.isKnifeAttacking = false;
+        this.attackBox.width  = 130;
+        if (this._state === 'kick') this._setState('idle');
+      }, 300);
+    }, 120);
   }
 
-  /** Special skill attack — big aura burst */
+  /** Special skill attack — big aura burst and backflip */
   specialAttack() {
     if (this.isDead || this.isSpecialAttacking) return;
+    
+    // Cooldown logic: 3 seconds
+    const now = Date.now();
+    if (this._lastSpecialTime && now - this._lastSpecialTime < 3000) return;
+    this._lastSpecialTime = now;
+
+    // Visual UI Cooldown (Dim the button)
+    const btn = document.getElementById('btn-special');
+    if (btn) {
+      btn.style.filter = 'grayscale(100%) brightness(0.5)';
+      setTimeout(() => { if (btn) btn.style.filter = ''; }, 3000);
+    }
+
+    Sound.playSkillCast();
     this.isSpecialAttacking = true;
     this.attackBox.width = 210;
     this._setState('special');
-    this._squash(1.15, 0.85);
+    this._squash(1.2, 0.85); // Brace for flip
     setTimeout(() => {
       this.isSpecialAttacking = false;
       this.attackBox.width    = 130;
@@ -140,13 +167,31 @@ export class Player {
   }
 
   shield() {
+    if (this.isDead || this.isShielding) return;
+
+    // Shield Cooldown: 2 seconds after dropping it
+    const now = Date.now();
+    if (this._lastShieldTime && now - this._lastShieldTime < 2000) return;
+
     this.isShielding = true;
     if (this._state !== 'dead') this._setState('shield');
+    
+    const btn = document.getElementById('btn-shield');
+    if (btn) btn.style.filter = 'drop-shadow(0 0 8px #64b5f6)'; // Brighten while holding
   }
 
   stopShield() {
+    if (!this.isShielding) return;
     this.isShielding = false;
     if (this._state === 'shield') this._setState('idle');
+    
+    // Start cooldown
+    this._lastShieldTime = Date.now();
+    const btn = document.getElementById('btn-shield');
+    if (btn) {
+      btn.style.filter = 'grayscale(100%) brightness(0.5)';
+      setTimeout(() => { if (btn) btn.style.filter = ''; }, 2000);
+    }
   }
 
   takeHit(damage) {
@@ -199,11 +244,21 @@ export class Player {
     this.position.y += this.velocity.y;
 
     const floorY = this.game.canvas.height - 96;
+    const wasAir = this.velocity.y !== 0;
     if (this.position.y + this.height >= floorY) {
+      if (wasAir && this.velocity.y > 2) {
+        this._onLand();
+        // Dynamic heavy landing squash based on fall speed
+        const impact = Math.min(this.velocity.y / 20, 1.5);
+        this._squash(1 + (impact * 0.5), 1 - (impact * 0.4));
+      }
       this.velocity.y = 0;
       this.position.y = floorY - this.height;
     } else {
       this.velocity.y += this.game.gravity;
+      // Stretches while falling/jumping
+      if (this.velocity.y < -5) this._squash(0.85, 1.15); // Upward stretch
+      else if (this.velocity.y > 10) this._squash(0.95, 1.05); // Downward fast
     }
 
     if (this.clamping) {
@@ -215,6 +270,7 @@ export class Player {
 
   /* ═══════════════════════ PRIVATE ══════════════════════════════ */
 
+  _onLand()  { Sound.playLand(); }
   _setState(s) {
     if (this._state === s) return;
     this._state = s;
@@ -233,7 +289,7 @@ export class Player {
     const f   = this._frame;
     const t   = this._t;
 
-    const { offsetY, bobScaleY, tiltAngle } = this._getStateAnim(f, t);
+    const anim = this._getStateAnim(f, t);
 
     ctx.save();
 
@@ -243,31 +299,85 @@ export class Player {
     }
 
     const cx = this.position.x + this.width  / 2;
-    const cy = this.position.y + this.height + offsetY;
+    const cy = this.position.y + this.height + anim.offsetY;
 
     ctx.translate(cx, cy);
     const flip = this.facingRight ? 1 : -1;
     ctx.scale(flip, 1);
-    ctx.scale(this._scaleX, this._scaleY * bobScaleY);
+    ctx.scale(this._scaleX, this._scaleY * anim.bobScaleY);
 
     if (this._state === 'dead') {
       this._deathRot = Math.min(this._deathRot + 0.045, Math.PI / 2);
       ctx.rotate(-this._deathRot);
     }
-    ctx.rotate(tiltAngle);
+    ctx.rotate(anim.globalRot);
 
-    // Sprite body
+    // Sprite body - SEGMENTED PUPPET RENDERING
     const dw = this.width  * 2.4;
     const dh = this.height * 1.32;
+    const dhBot = dh * 0.45;
+
     if (this.img.complete && this.img.naturalWidth > 0) {
-      ctx.drawImage(this.img, -dw / 2, -dh, dw, dh);
+      const nw = this.img.naturalWidth;
+      const nh = this.img.naturalHeight;
+      const cutY = nh * 0.55; // Waist line in raw image
+      const dhTop = dh * 0.55;
+
+      // Bottom Half (Hips & Legs) 
+      const isSplitRun = (this._state === 'run');
+
+      if (isSplitRun) {
+        // SEGMENTED RENDERING — Only for run (stomach stays still)
+        const hipPct = 0.35; 
+        const dhHip = dhBot * hipPct;
+        const dhLeg = dhBot * (1 - hipPct);
+        const nwHip = nw;      const nhHip = (nh - cutY) * hipPct;
+        const nwLeg = nw;      const nhLeg = (nh - cutY) * (1 - hipPct);
+        const syHip = cutY;    const syLeg = cutY + nhHip;
+
+        // 1. Hips (Static with torso)
+        ctx.save();
+        ctx.translate(0, -dhBot);
+        ctx.rotate(anim.topRot); // Hips follow torso tilted stance
+        ctx.drawImage(this.img, 0, syHip, nwHip, nhHip, -dw / 2, 0, dw, dhHip + 2); // +2 overlap
+        ctx.restore();
+
+        // 2. Legs (Rotation from hip-line)
+        ctx.save();
+        ctx.translate(0, -dhBot + dhHip); // Pivot at the hip-line
+        ctx.rotate(anim.bottomRot);
+        ctx.scale(1, anim.bottomScaleY);
+        ctx.drawImage(this.img, 0, syLeg, nwLeg, nhLeg, -dw / 2, -1, dw, dhLeg + 1); // -1 overlap
+        ctx.restore();
+      } else {
+        // SOLID RENDERING — For combat/skills (ensures cohesion)
+        ctx.save();
+        ctx.translate(0, -dhBot); // Pivot at the waist
+        ctx.rotate(anim.bottomRot);
+        ctx.scale(1, anim.bottomScaleY);
+        ctx.drawImage(this.img, 0, cutY, nw, nh - cutY, -dw / 2, 0, dw, dhBot);
+        ctx.restore();
+      }
+
+      // Top Half (Torso, Head, Arms)
+      ctx.save();
+      ctx.translate(0, -dhBot); // Pivot at the waist
+      ctx.rotate(anim.topRot);
+      // Added +5 on the destination height to slightly overlap the waist gap
+      ctx.drawImage(this.img, 0, 0, nw, cutY, -dw / 2, -dhTop, dw, dhTop + 5);
+      ctx.restore();
     } else {
       ctx.fillStyle = '#888';
       ctx.fillRect(-this.width/2, -this.height, this.width, this.height);
     }
 
-    // Weapon / item overlay (always visible while equipped)
+    // Weapon / item overlay (matches Top Half rotation)
+    ctx.save();
+    ctx.translate(0, -dhBot); // Go to waist pivot
+    ctx.rotate(anim.topRot);  // Rotate with body
+    ctx.translate(0, dhBot);  // Go back to floor origin
     this._drawEquipped(ctx, f, t);
+    ctx.restore();
 
     ctx.restore();
 
@@ -317,10 +427,10 @@ export class Player {
           tx = 32 + ext * 10;
           ty = -this.height * 0.66 - ext * 8;
         } else if (state === 'special') {
-          // Raised overhead + shaking
-          angle = -Math.PI * 0.75 + Math.sin(f * 0.4) * 0.12;
+          // Spinning sword violently!
+          angle = f * -0.5;
           tx = 18;
-          ty = -this.height * 0.82;
+          ty = -this.height * 0.6;
         } else if (state === 'shield') {
           // Rested at side while shielding
           angle = Math.PI * 0.42;
@@ -389,7 +499,7 @@ export class Player {
           ctx.restore();
         } else if (state === 'special') {
           // Shield spin / glow
-          const spin = f * 0.15;
+          const spin = f * 0.5; // Fast spin
           ctx.save();
           ctx.translate(42, -this.height * 0.5);
           ctx.rotate(spin);
@@ -584,53 +694,76 @@ export class Player {
     ctx.restore();
   }
 
-  /* ─── State animation params ─────────────────────────────── */
+  /* ─── State animation params (Dynamic Keyframing) ────────── */
   _getStateAnim(f, t) {
     let offsetY   = 0;
     let bobScaleY = 1;
-    let tiltAngle = 0;
+    let globalRot = 0;
+    let topRot    = 0;
+    let bottomRot = 0;
+    let bottomScaleY = 1;
 
     switch (this._state) {
       case 'idle':
-        // Stand perfectly still — no bob, no sway
-        offsetY   = 0;
-        bobScaleY = 1;
-        tiltAngle = 0;
+        // Slow confident breathing
+        bobScaleY = 1 + Math.sin(t * 1.5) * 0.012;
         break;
       case 'run': {
-        const c = Math.sin(t * 3.5);
-        offsetY  = Math.abs(c) * -5;
-        bobScaleY = 1 - Math.abs(c) * 0.04;
-        tiltAngle = 0.12;
+        // Torso stays still, only legs pump
+        offsetY   = 0;
+        bobScaleY = 1;
+        globalRot = 0;
+        topRot    = 0;
+        // High-speed leg movement (t * 15)
+        bottomRot = Math.sin(t * 15) * 0.22; 
         break;
       }
       case 'jump':
-        bobScaleY = 1.05;
-        tiltAngle = this.velocity.y < 0 ? -0.08 : 0.06;
+        bobScaleY = 1.05; // Slightly elongated
+        globalRot = this.velocity.y < 0 ? -0.1 : 0.1; // Leans into the arc
+        bottomScaleY = 0.5; // Legs tuck up tightly
         break;
       case 'punch':
-        tiltAngle = 0.12;
+        // Anticipation (frame 0-5) leans back, strike (frame 5+) lunges forward
+        if (f < 5) {
+          globalRot = -0.1; topRot = -0.2; offsetY = -2;
+        } else {
+          globalRot = 0.1; topRot = 0.2; offsetY = 3;
+        }
         break;
       case 'kick':
-        tiltAngle = 0.18;
+        // Sword slash: big windup, enormous snap forward
+        if (f < 6) {
+          globalRot = -0.15; topRot = -0.3; offsetY = -4;
+        } else {
+          globalRot = 0.2; topRot = 0.4; offsetY = 5;
+        }
         break;
       case 'special':
-        offsetY   = -Math.abs(Math.sin(f * 0.22)) * 8;
-        bobScaleY = 1 + Math.sin(f * 0.3) * 0.05;
+        // High leap, body doesn't spin (user preference)
+        globalRot = 0; 
+        topRot    = -0.15; // Lean back
+        offsetY   = -Math.abs(Math.sin(f * 0.15)) * 40; // High leap
+        bottomScaleY = 0.8; // Tucked legs
         break;
       case 'shield':
-        offsetY   = 8;
-        bobScaleY = 0.93;
+        // Brace hard into the ground
+        offsetY   = 12;
+        bobScaleY = 0.85; // Crunched down extremely low
+        topRot    = 0.15;
+        bottomRot = -0.1;
         break;
       case 'hurt':
-        tiltAngle = -0.25;
-        offsetY   = Math.min(f, 8) * 0.5;
+        // Violent whiplash backwards
+        globalRot = -0.2;
+        topRot    = -0.3;
+        offsetY   = Math.min(f, 8) * -1;
         if (f > 15) this._setState('idle');
         break;
       case 'dead':
         break;
     }
-    return { offsetY, bobScaleY, tiltAngle };
+    return { offsetY, bobScaleY, globalRot, topRot, bottomRot, bottomScaleY };
   }
 
   animate() {}  // Sprite API stub

@@ -21,13 +21,13 @@ export function determineWinner({ player, enemy, timerId, game, onPlayerWin, onP
   game.displayText.style.display = 'flex';
 
   if (player.health === enemy.health) {
-    game.displayText.innerHTML = 'Tie! ⚔️';
+    game.displayText.innerHTML = 'YOU LOST! 💀'; // Changed from 'Tie!'
     setTimeout(() => { if (onPlayerLose) onPlayerLose(); }, 2500);
   } else if (player.health > enemy.health) {
     game.displayText.innerHTML = 'Player Wins! 🏆';
     setTimeout(() => { if (onPlayerWin) onPlayerWin(); }, 2000);
   } else {
-    game.displayText.innerHTML = 'Enemy AI Wins! 💀';
+    game.displayText.innerHTML = 'YOU LOST! 💀'; // Changed from 'Enemy AI Wins!'
     setTimeout(() => { if (onPlayerLose) onPlayerLose(); }, 2500);
   }
 }

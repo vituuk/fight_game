@@ -1,6 +1,12 @@
 import { Player } from './classes/Player.js';
 import { rectangularCollision, determineWinner } from './utils/collision.js';
 import { network, NetworkRole } from './network.js';
+import { Sound } from './sound.js';
+
+// Init audio on first interaction (browser autoplay policy)
+const _initAudio = () => { Sound.init(); };
+window.addEventListener('keydown',   _initAudio, { once: true });
+window.addEventListener('pointerdown', _initAudio, { once: true });
 
 // ─── Mobile Responsive Scaling ───────────────────────────────────────────────
 const GAME_W = 1024;
@@ -639,6 +645,98 @@ enemy.height = CHAR_H;
 enemy.attackBox.width  = ATTACK_W;
 enemy.attackBox.height = ATTACK_H;
 
+// ─ Extra Enemy Pool (up to 3 extra, activated from round 2) ───────────────────────
+const EXTRA_ENEMY_SPAWN_X = [540, 340, 640]; // Flanking positions
+const EXTRA_ENEMY_COLORS  = ['#ff7043','#ab47bc','#26c6da'];
+
+const enemyPool = EXTRA_ENEMY_SPAWN_X.map((spawnX, i) => {
+  const e = new Player(game, {
+    position:    { x: spawnX, y: 10 },
+    velocity:    { x: 0, y: 0 },
+    name:        'Enemy',
+    facingRight: false,
+    offset:      { x: -ATTACK_W, y: 70 },
+    spriteSrc:   STAGES[0].enemySrc,
+    swordSrc:    '/assets/characters/sword1.png',
+    shieldSrc:   '/assets/characters/shield.png',
+    skillSrc:    '/assets/characters/skill.png',
+    accentColor: EXTRA_ENEMY_COLORS[i],
+    isEnemy:     true,
+  });
+  e.width  = CHAR_W;
+  e.height = CHAR_H;
+  e.attackBox.width  = ATTACK_W;
+  e.attackBox.height = ATTACK_H;
+  e.isHidden = true; // Start hidden — activated per round
+  e.isDead   = true;
+  return e;
+});
+
+// Tracks how many extra enemies are active this round (0 = only main enemy)
+let activeExtraCount = 0;
+
+// Generic AI factory — returns an independent state machine tick function
+// Uses raw strings (not AI.XXX) so it can be created before the AI object is defined
+function createAI(target) {
+  let state = 'approach';  // = AI.APPROACH
+  let timer = 0;
+  let cd    = 0;
+  return function tick() {
+    if (target.isHidden || target.isDead || player.isDead) return;
+    const dx       = player.position.x - target.position.x;
+    const absDx    = Math.abs(dx);
+    const grounded = target.velocity.y === 0;
+    cd = Math.max(0, cd - 1);
+    timer++;
+    target.facingRight = dx > 0;
+    switch (state) {
+      case 'approach':
+        target.velocity.x = dx > 0 ? 3.6 : -3.6;  // AI_SPEED * 0.9
+        if (player.position.y < target.position.y - 100 && grounded) target.velocity.y = -20;
+        if (absDx <= 130) {  // CLOSE_DIST ≈ CHAR_W(80) + 50
+          const r = Math.random();
+          state = r < 0.35 ? 'punch' : r < 0.55 ? 'kick' : r < 0.65 ? 'special' :
+                  r < 0.75 ? 'shield' : r < 0.85 ? 'jump_atk' : 'back_off';
+          timer = 0;
+        }
+        break;
+      case 'punch':
+        target.velocity.x = 0;
+        if (timer === 3 && !cd) { target.attack();       cd = 55; }
+        if (timer === 20) { state = Math.random() < 0.6 ? 'approach' : 'back_off'; timer = 0; }
+        break;
+      case 'kick':
+        target.velocity.x = dx > 0 ? 2 : -2;
+        if (timer === 12 && !cd) { target.knifeAttack(); cd = 65; }
+        if (timer === 30) { state = 'approach'; timer = 0; }
+        break;
+      case 'special':
+        target.velocity.x = 0;
+        if (timer === 12 && !cd) { target.specialAttack(); cd = 120; }
+        if (timer === 60) { state = 'approach'; timer = 0; }
+        break;
+      case 'back_off':
+        target.velocity.x = dx > 0 ? -4 : 4;  // -AI_SPEED
+        if (timer > 28) { state = 'approach'; timer = 0; }
+        break;
+      case 'shield':
+        target.velocity.x = 0;
+        target.shield();
+        if (timer > 40) { target.stopShield(); state = 'punch'; timer = 0; }
+        break;
+      case 'jump_atk':
+        if (timer === 1 && grounded) { target.velocity.y = -22; target.velocity.x = dx > 0 ? 4 : -4; }
+        if (timer === 14 && !cd) { target.attack(); cd = 50; }
+        if (timer > 40 && grounded) { state = 'approach'; timer = 0; }
+        break;
+    }
+    if (timer > 200) { state = 'approach'; timer = 0; }
+  };
+}
+
+// Create a persistent tick function for each pool enemy
+const poolAITick = enemyPool.map(e => createAI(e));
+
 
 
 export const remotePlayers = {};
@@ -827,6 +925,44 @@ function updateEnemyHUD() {
   if (el) el.textContent = STAGES[currentStageIdx].enemyName;
 }
 
+/** 
+ * Calculate and show the collective health of all active enemies.
+ * Ensures the main UI bar represents the entire squad's life.
+ */
+function updateEnemyHealthHUD() {
+  const isOnline = network.role !== NetworkRole.OFFLINE;
+  const p2Bar    = game.p2HealthBar;
+  if (!p2Bar || isOnline) return;
+
+  // OFFLINE: Multi-enemy health bar logic
+  let totalMax = 100; // Main enemy
+  let totalCur = Math.max(0, enemy.health);
+  let activeCount = 1;
+
+  enemyPool.forEach(e => {
+    if (!e.isHidden) {
+      totalMax += 100;
+      totalCur += Math.max(0, e.health);
+      activeCount++;
+    }
+  });
+
+  const avgHealth = (totalCur / totalMax) * 100;
+  p2Bar.style.width = avgHealth + '%';
+
+  // Update label to show survivors count
+  const aliveCount = (enemy.health > 0 ? 1 : 0) + 
+                     enemyPool.filter(e => !e.isHidden && e.health > 0).length;
+  const nameEl     = document.querySelector('.p2-health .player-name');
+  if (nameEl) {
+    const baseName = STAGES[currentStageIdx].enemyName;
+    nameEl.textContent = aliveCount > 1 ? `${baseName} (+ ${aliveCount-1})` : baseName;
+    
+    // Visual cue: if all are dead, show 'OUT OF BLOOD'
+    if (aliveCount === 0) nameEl.textContent = 'ELIMINATED';
+  }
+}
+
 (function injectStageBadge() {
   if (document.getElementById('stage-badge')) return;
   const uiLayer = document.getElementById('ui-layer');
@@ -842,6 +978,41 @@ function updateEnemyHUD() {
 function updateStageBadge() {
   const el = document.getElementById('stage-badge-num');
   if (el) el.textContent = (currentStageIdx + 1) + ' / ' + STAGES.length;
+}
+
+/** Flash a centred banner: ROUND X and enemy count */
+function showRoundBanner(roundNum, enemyCount) {
+  let banner = document.getElementById('round-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'round-banner';
+    Object.assign(banner.style, {
+      position:      'absolute',
+      top:           '50%',
+      left:          '50%',
+      transform:     'translate(-50%, -50%) scale(0)',
+      fontFamily:    '"Press Start 2P", cursive',
+      fontSize:      '28px',
+      color:         '#ffd600',
+      textShadow:    '0 0 18px #ff6f00, 0 0 4px #000',
+      textAlign:     'center',
+      whiteSpace:    'nowrap',
+      pointerEvents: 'none',
+      zIndex:        '999',
+      lineHeight:    '1.5',
+      transition:    'transform 0.2s cubic-bezier(.17,.67,.3,1.5), opacity 0.4s',
+      opacity:       '0',
+    });
+    document.getElementById('game-container').appendChild(banner);
+  }
+  const sub = enemyCount > 1 ? `\n⚔️ ${enemyCount} ENEMIES!` : '';
+  banner.textContent = `ROUND ${roundNum}${sub}`;
+  banner.style.opacity   = '1';
+  banner.style.transform = 'translate(-50%, -50%) scale(1.05)';
+  setTimeout(() => {
+    banner.style.opacity   = '0';
+    banner.style.transform = 'translate(-50%, -50%) scale(0.8)';
+  }, 2000);
 }
 
 /** Full round reset */
@@ -904,11 +1075,45 @@ function resetRound(omitPlayerPos = false) {
   newImg.src   = stage.enemySrc;
   enemy.img    = newImg;
 
+  // ─ Activate a random number of extra enemies from round 2 onwards ──────────
+  const roundNum = currentStageIdx + 1;
+  // Round 1: 0 extras. Round 2+: randomly pick 1-3 extras (= total 2-4 enemies)
+  activeExtraCount = roundNum >= 2 ? (1 + Math.floor(Math.random() * 3)) : 0;
+
+  enemyPool.forEach((e, i) => {
+    if (i < activeExtraCount) {
+      e.isHidden          = false;
+      e.isDead            = false;
+      e.health            = 100;
+      e.isAttacking       = false;
+      e.isKnifeAttacking  = false;
+      e.isSpecialAttacking= false;
+      e.isShielding       = false;
+      e.position.x        = EXTRA_ENEMY_SPAWN_X[i];
+      e.position.y        = 10;
+      e.velocity.x        = 0;
+      e.velocity.y        = 0;
+      e.facingRight       = false;
+      e.name              = stage.enemyName + ' ' + (i + 2);
+      e.accentColor       = EXTRA_ENEMY_COLORS[i];
+      const img = new Image();
+      img.src   = stage.enemySrc;
+      e.img     = img;
+    } else {
+      e.isHidden = true;
+      e.isDead   = true;
+      e.health   = 0;
+    }
+  });
+
+  // Show how many enemies incoming via a quick banner
+  const totalEnemies = 1 + activeExtraCount;
+  showRoundBanner(currentStageIdx + 1, totalEnemies);
+
   // --- HUD ---
   game.p1HealthBar.style.width   = '100%';
-  game.p2HealthBar.style.width   = '100%';
   game.displayText.style.display = 'none';
-  updateEnemyHUD();
+  updateEnemyHealthHUD(); // Replaced updateEnemyHUD() for collective tracking
   updateStageBadge();
 
   // --- AI ---
@@ -1052,21 +1257,28 @@ function animate() {
   }
 
   // AI & Physics
-  refreshAI(); // Re-evaluate every frame so it reacts to friends joining/leaving
+  refreshAI();
   if (gameActive) {
     if (enemy.isAI) {
       tickEnemyAI();
     } else if (network.role === NetworkRole.CLIENT) {
-      enemy.velocity.x = 0; // Clients obey Host's broadcasted enemy position
+      enemy.velocity.x = 0;
     }
+    // Tick AI for each active pool enemy
+    poolAITick.forEach((tick, i) => { if (!enemyPool[i].isHidden && !enemyPool[i].isDead) tick(); });
   } else {
     enemy.velocity.x = 0;
+    enemyPool.forEach(e => { e.velocity.x = 0; });
   }
 
   const isOnline = network.role !== NetworkRole.OFFLINE;
   const allFighters = isOnline
-    ? [player, ...Object.values(remotePlayers)]         // Online: player + all remote peers
-    : (enemy.isHidden ? [player] : [player, enemy]);   // Offline: player + AI enemy
+    ? [player, ...Object.values(remotePlayers)]
+    : [
+        player,
+        ...(enemy.isHidden ? [] : [enemy]),
+        ...enemyPool.filter(e => !e.isHidden && !e.isDead),
+      ];
   allFighters.forEach(p => p.update());
   allFighters.forEach(p => emitSkillAmbient(p));
 
@@ -1119,8 +1331,17 @@ function animate() {
             if (network.role === NetworkRole.OFFLINE) {
               // OFFLINE: apply damage directly
               victim.takeHit(dmg);
-              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
-              if (victim === enemy)  game.p2HealthBar.style.width = enemy.health  + '%';
+              // Play hit sound
+              if (victim.isShielding)   Sound.playShieldBlock();
+              else if (dmg >= 25)       Sound.playSpecialMove();
+              else if (dmg >= 15)       Sound.playSwordClash();
+              else                      Sound.playPunch();
+              if (victim === player) {
+                game.p1HealthBar.style.width = player.health + '%';
+              } else {
+                // ANY enemy (main or pool) hit -> update the unified HUD bar
+                updateEnemyHealthHUD();
+              }
 
             } else if (network.role === NetworkRole.HOST) {
               // HOST is sole damage authority for ALL collisions (both directions)
@@ -1145,10 +1366,22 @@ function animate() {
 
     // Win condition
     if (network.role === NetworkRole.OFFLINE) {
-      if (!enemy.isHidden && (enemy.health <= 0 || player.health <= 0)) {
+      // All enemies must be dead: main enemy + all active pool enemies
+      const allExtraDead = enemyPool.every(e => e.isHidden || e.isDead || e.health <= 0);
+      const mainEnemyDead = enemy.isHidden || enemy.isDead || enemy.health <= 0;
+      
+      if (player.health <= 0 || (mainEnemyDead && allExtraDead)) {
         gameActive = false;
-        determineWinner({ player, enemy, timerId, game,
-          onPlayerWin: handlePlayerWin, onPlayerLose: handlePlayerLose });
+        // Calculate a 'total enemy health' for determineWinner (0 or 100)
+        const combinedEnemyHealth = (mainEnemyDead && allExtraDead) ? 0 : 100;
+        determineWinner({ 
+          player, 
+          enemy: { health: combinedEnemyHealth }, // Hand-rolled state for HUD
+          timerId, 
+          game,
+          onPlayerWin: handlePlayerWin, 
+          onPlayerLose: handlePlayerLose 
+        });
       }
     } else if (network.role === NetworkRole.HOST) {
       const remoteIds = Object.keys(remotePlayers);
@@ -1304,8 +1537,15 @@ function btn(id, onDown, onUp = () => {}) {
 
 btn('btn-left',  () => { keys.a.pressed = true; }, () => { keys.a.pressed = false; });
 btn('btn-right', () => { keys.d.pressed = true; }, () => { keys.d.pressed = false; });
-btn('btn-up',    () => { if (!player.isDead && player.velocity.y === 0) player.velocity.y = -22; });
-btn('btn-attack',() => { if (!player.isDead) { player.attack(); } });
+btn('btn-up',    () => {
+  if (!player.isDead && player.velocity.y === 0) {
+    player.velocity.y = -22;
+    Sound.playJump();
+  }
+});
+btn('btn-attack', () => {
+  if (!player.isDead) player.attack();
+});
 
 const SKILL_BTNS = [
   { id: 'btn-kick',    skill: 'sword'  },
@@ -1321,9 +1561,19 @@ function selectSkill(skill) {
   });
 }
 
-btn('btn-kick', () => { if (!player.isDead) { selectSkill('sword'); player.knifeAttack(); } });
+btn('btn-kick',    () => { if (!player.isDead) { selectSkill('sword'); player.knifeAttack(); } });
 btn('btn-special', () => { if (!player.isDead) { selectSkill('skill'); player.specialAttack(); } });
-btn('btn-shield', () => { if (!player.isDead) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
+btn('btn-shield',  () => { if (!player.isDead) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
+
+// Mute button
+const muteBtn = document.getElementById('btn-mute');
+if (muteBtn) {
+  muteBtn.addEventListener('click', () => {
+    Sound.init(); // ensure context started
+    const muted = Sound.toggleMute();
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+  });
+}
 
 // ─── Hero Selection ───────────────────────────────────────────────────────────
 const heroBtns = document.querySelectorAll('.hero-btn');
