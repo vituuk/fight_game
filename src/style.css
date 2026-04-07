@@ -115,6 +115,52 @@ body {
   transform: scale(1.15);
 }
 
+.sword-selection {
+  position: absolute;
+  top: 65px; /* Positioned below hero selection */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sword-options {
+  display: flex;
+  gap: 8px;
+}
+
+.sword-btn {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  padding: 2px;
+  border: 2px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sword-btn:hover {
+  border-color: #fbc531;
+  transform: scale(1.1);
+}
+
+.sword-btn.active {
+  border-color: #ff9f43;
+  box-shadow: 0 0 10px #ff9f43;
+  transform: scale(1.15);
+  background: rgba(255, 159, 67, 0.2);
+}
+
 
 .health-container {
   width: 38%;

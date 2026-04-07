@@ -1598,6 +1598,23 @@ heroBtns.forEach(btn => {
   });
 });
 
+// ─── Sword Selection ──────────────────────────────────────────────────────────
+const swordBtns = document.querySelectorAll('.sword-btn');
+
+swordBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    // 1. Update UI Classes
+    swordBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // 2. Change Player Sword Sprite
+    const newSrc = btn.getAttribute('data-src');
+    const img = new Image();
+    img.src = newSrc;
+    player.imgSword = img;
+  });
+});
+
 
 // ─── Multiplayer Lobby ──────────────────────────────────────────────────────
 const urlParams      = new URLSearchParams(window.location.search);

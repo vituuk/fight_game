@@ -409,7 +409,7 @@ export class Player {
         if (!this.imgSword.complete || !this.imgSword.naturalWidth) break;
 
         // Sword is ALWAYS drawn – angle changes per state
-        const SW = 130;   // ← BIGGER sword (was ~80)
+        const SW = 175;   // ← BIGGER sword
         const SH = SW * (this.imgSword.naturalHeight / this.imgSword.naturalWidth);
 
         let tx = 28, ty = -this.height * 0.62;
