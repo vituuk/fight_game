@@ -168,7 +168,13 @@
             </button>
           </div>
           <div class="action-row">
-            <button id="btn-special" class="action-btn btn-special" title="Skill (Q)">
+            <!-- Ability badge: sits above btn-special and shows current hero's active -->
+            <div id="ability-badge" class="ability-badge">
+              <span id="ability-badge-icon" class="ab-icon">⚡</span>
+              <span id="ability-badge-name" class="ab-name">Fury Storm</span>
+              <div class="ab-key">Q</div>
+            </div>
+            <button id="btn-special" class="action-btn btn-special" title="Hero Ability (Q)">
               <span class="btn-icon">✨</span>
               <span class="btn-label">Skill</span>
               <span class="btn-key">Q</span>

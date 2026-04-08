@@ -48,6 +48,7 @@ export class Player {
     this.imgSword  = loadImg(swordSrc);
     this.imgShield = loadImg(shieldSrc);
     this.imgSkill  = loadImg(skillSrc);
+    this.imgEffect1 = loadImg('/assets/characters/effect1.png');
 
     // Hitbox
     this.width  = 80;
@@ -78,6 +79,12 @@ export class Player {
      */
     this.equippedSkill = 'sword';   // start equipped with sword
 
+    /**
+     * heroKey: maps to unique active ability.
+     * 'DEFAULT' | 'DD' | 'HARATU' | 'LUFFY'
+     */
+    this.heroKey = 'DEFAULT';
+
     // ── Internal animation ─────────────────────────────────────
     this._state    = 'idle';
     this._frame    = 0;
@@ -89,8 +96,45 @@ export class Player {
     this._scaleX = 1;
     this._scaleY = 1;
 
+    // Gear Stretch — temporary extended reach tracker
+    this._stretchActive = false;
+
+    // After-image (Phantom Rush)
+    this._afterImageAlpha = 0;
+    this._afterImageX     = 0;
+    this._afterImageY     = 0;
+    this._afterImageFlip  = 1;
+
     // Screen boundary clamping
     this.clamping = true;
+  }
+
+  /** Stand the character back up and clear all temporary states/animations */
+  reset() {
+    this.health             = 100;
+    this.isDead             = false;
+    this.isAttacking        = false;
+    this.isKnifeAttacking   = false;
+    this.isSpecialAttacking = false;
+    this.isShielding        = false;
+    
+    this._state    = 'idle';
+    this._frame    = 0;
+    this._t        = Math.random() * Math.PI * 2;
+    this._hitFlash = 0;
+    this._deathRot = 0;
+    this._scaleX   = 1;
+    this._scaleY   = 1;
+    
+    // Ability flags
+    this._stretchActive = false;
+    this._afterImageAlpha = 0;
+    this.velocity = { x: 0, y: 0 };
+    this.clamping = true;
+    
+    // Clear cooldowns
+    this._lastSpecialTime = 0;
+    this._lastShieldTime  = 0;
   }
 
   /* ═══════════════════════ PUBLIC API ══════════════════════════ */
@@ -147,23 +191,25 @@ export class Player {
     if (this._lastSpecialTime && now - this._lastSpecialTime < 3000) return;
     this._lastSpecialTime = now;
 
-    // Visual UI Cooldown (Dim the button)
-    const btn = document.getElementById('btn-special');
-    if (btn) {
-      btn.style.filter = 'grayscale(100%) brightness(0.5)';
-      setTimeout(() => { if (btn) btn.style.filter = ''; }, 3000);
-    }
+    this._activateSpecial();
+  }
 
+  /**
+   * Raw special-attack activation — NO cooldown guard.
+   * Called by the hero ability system which manages its own cooldowns.
+   */
+  _activateSpecial() {
+    if (this.isDead || this.isSpecialAttacking) return;
     Sound.playSkillCast();
     this.isSpecialAttacking = true;
-    this.attackBox.width = 210;
+    this.attackBox.width = 250;   // wider reach
     this._setState('special');
-    this._squash(1.2, 0.85); // Brace for flip
+    this._squash(1.2, 0.85);
     setTimeout(() => {
       this.isSpecialAttacking = false;
       this.attackBox.width    = 130;
       if (this._state === 'special') this._setState('idle');
-    }, 700);
+    }, 2000);  // 2 full seconds of active skill window
   }
 
   shield() {
@@ -293,9 +339,11 @@ export class Player {
 
     ctx.save();
 
-    if (this._hitFlash > 0) {
+    // Hit flash: scoped inside this save() block so it ONLY affects this character's pixels
+    const doHitFlash = this._hitFlash > 0;
+    if (doHitFlash) {
       this._hitFlash--;
-      ctx.filter = 'brightness(8) saturate(0)';
+      ctx.filter = 'brightness(5) saturate(0)';
     }
 
     const cx = this.position.x + this.width  / 2;
@@ -381,6 +429,12 @@ export class Player {
 
     ctx.restore();
 
+    // After-image ghost (Phantom Rush)
+    if (this._afterImageAlpha > 0) {
+      this._afterImageAlpha -= 0.045;
+      this._drawAfterImage(ctx);
+    }
+
     // World-space vfx
     this._drawWorldEffects(ctx);
 
@@ -404,40 +458,35 @@ export class Player {
 
     switch (eq) {
 
-      /* ── SWORD ────────────────────────────────────────────── */
+          /* ── SWORD ────────────────────────────────────────────── */
       case 'sword': {
         if (!this.imgSword.complete || !this.imgSword.naturalWidth) break;
 
-        // Sword is ALWAYS drawn – angle changes per state
-        const SW = 175;   // ← BIGGER sword
+        const SW = 175;
         const SH = SW * (this.imgSword.naturalHeight / this.imgSword.naturalWidth);
 
         let tx = 28, ty = -this.height * 0.62;
-        let angle = -Math.PI * 0.28;   // default rest: angled forward down
+        let angle = -Math.PI * 0.28;
+        const isActiveAtk = (state === 'punch' || state === 'kick' || state === 'special');
 
         if (state === 'punch') {
-          // Stab forward: sword thrusts out horizontally
           const ext = Math.min(f / 5, 1);
           angle = (-Math.PI * 0.05) + (-Math.PI * 0.05) * ext;
           tx = 30 + ext * 22;
         } else if (state === 'kick') {
-          // Wide slash: sword sweeps from high to low
           const ext = Math.min(f / 6, 1);
           angle = -Math.PI * 0.55 + (Math.PI * 0.85) * ext;
           tx = 32 + ext * 10;
           ty = -this.height * 0.66 - ext * 8;
         } else if (state === 'special') {
-          // Spinning sword violently!
           angle = f * -0.5;
           tx = 18;
           ty = -this.height * 0.6;
         } else if (state === 'shield') {
-          // Rested at side while shielding
           angle = Math.PI * 0.42;
           tx = -16;
           ty = -this.height * 0.3;
         } else if (state === 'run') {
-          // Pumping slightly with run cycle
           angle = -Math.PI * 0.22 + Math.sin(t * 3.5) * 0.1;
           ty = -this.height * 0.58 + Math.abs(Math.sin(t * 3.5)) * 5;
         } else if (state === 'jump') {
@@ -451,14 +500,13 @@ export class Player {
           angle = Math.PI * 0.3;
           tx = 20; ty = -this.height * 0.25;
         } else {
-          // idle: sword held steady in ready position
           angle = -Math.PI * 0.28;
           ty    = -this.height * 0.62;
         }
 
-        // Glow when actively attacking
         ctx.save();
-        if (state === 'punch' || state === 'kick' || state === 'special') {
+        // shadowBlur only during active attacks — idle has no glow cost
+        if (isActiveAtk) {
           ctx.shadowColor = '#a0d8ff';
           ctx.shadowBlur  = 22;
         }
@@ -598,17 +646,21 @@ export class Player {
     const cx = this.position.x + this.width  / 2;
     const cy = this.position.y + this.height / 2;
 
-    // Shield bubble (always when equipped+blocking OR just blocking)
+    // Shield bubble — gradient cached by position bucket (16px grid)
     if (this.isShielding || (this.equippedSkill === 'shield' && this._state === 'shield')) {
+      const bucket = Math.round(cx / 16);
+      if (bucket !== this._shieldGrdBucket) {
+        this._shieldGrdBucket = bucket;
+        const r = 76;
+        this._shieldGrd = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
+        this._shieldGrd.addColorStop(0, 'rgba(100,200,255,0.85)');
+        this._shieldGrd.addColorStop(1, 'rgba(0,60,220,0.0)');
+      }
       ctx.save();
       ctx.globalAlpha = 0.40 + Math.sin(this._t * 4) * 0.08;
-      const r   = 76;
-      const grd = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
-      grd.addColorStop(0, 'rgba(100,200,255,0.85)');
-      grd.addColorStop(1, 'rgba(0,60,220,0.0)');
-      ctx.fillStyle = grd;
+      ctx.fillStyle   = this._shieldGrd;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r, r * 1.1, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, 76, 76 * 1.1, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(160,230,255,0.65)';
       ctx.lineWidth   = 2;
@@ -616,43 +668,50 @@ export class Player {
       ctx.restore();
     }
 
-    // Skill equip – ambient glow around character
+    // Skill equip ambient glow — gradient cached
     if (this.equippedSkill === 'skill' && !this.isSpecialAttacking) {
-      const t = this._t;
+      const bucket = Math.round(cx / 16);
+      if (bucket !== this._skillGrdBucket) {
+        this._skillGrdBucket = bucket;
+        this._skillGrd = ctx.createRadialGradient(cx, cy, 10, cx, cy, 70);
+        this._skillGrd.addColorStop(0, 'rgba(255,180,0,0.8)');
+        this._skillGrd.addColorStop(1, 'rgba(255,80,0,0.0)');
+      }
       ctx.save();
-      ctx.globalAlpha = 0.18 + Math.sin(t * 2) * 0.06;
-      const grd = ctx.createRadialGradient(cx, cy, 10, cx, cy, 70);
-      grd.addColorStop(0, 'rgba(255,180,0,0.8)');
-      grd.addColorStop(1, 'rgba(255,80,0,0.0)');
-      ctx.fillStyle = grd;
+      ctx.globalAlpha = 0.18 + Math.sin(this._t * 2) * 0.06;
+      ctx.fillStyle   = this._skillGrd;
       ctx.beginPath();
       ctx.arc(cx, cy, 70, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
-    // Special aura rings
+    // Special aura rings — batched into single save/restore
     if (this.isSpecialAttacking) {
       const tNow = Date.now() / 80;
+      ctx.save();
+      ctx.shadowColor = '#ff8800';
+      ctx.shadowBlur  = 18;
       [[75,'rgba(255,200,0,0.65)',3],[95,'rgba(255,120,0,0.45)',2],[115,'rgba(255,50,0,0.25)',2]]
         .forEach(([r, c, lw], i) => {
           const pulse = r + Math.sin(tNow + i * 1.2) * 10;
-          ctx.save();
           ctx.strokeStyle = c;
           ctx.lineWidth   = lw;
-          ctx.shadowColor = '#ff8800';
-          ctx.shadowBlur  = 18;
           ctx.beginPath();
           ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
           ctx.stroke();
-          ctx.restore();
         });
-      ctx.save();
-      const grd = ctx.createRadialGradient(cx, cy, 10, cx, cy, 80);
-      grd.addColorStop(0, 'rgba(255,200,0,0.3)');
-      grd.addColorStop(1, 'rgba(255,0,0,0)');
-      ctx.fillStyle   = grd;
+      // Gradient fill — cached
+      const bucket = Math.round(cx / 16);
+      if (bucket !== this._specialGrdBucket) {
+        this._specialGrdBucket = bucket;
+        this._specialGrd = ctx.createRadialGradient(cx, cy, 10, cx, cy, 80);
+        this._specialGrd.addColorStop(0, 'rgba(255,200,0,0.3)');
+        this._specialGrd.addColorStop(1, 'rgba(255,0,0,0)');
+      }
+      ctx.fillStyle   = this._specialGrd;
       ctx.globalAlpha = 0.65;
+      ctx.shadowBlur  = 0; // no blur needed for fill
       ctx.beginPath();
       ctx.arc(cx, cy, 80, 0, Math.PI * 2);
       ctx.fill();
@@ -675,6 +734,23 @@ export class Player {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /* ─── After-image ghost (Phantom Rush) ──────────────────── */
+  _drawAfterImage(ctx) {
+    if (!this.img.complete || !this.img.naturalWidth) return;
+    const cx = this._afterImageX + this.width / 2;
+    const cy = this._afterImageY + this.height;
+    const dw = this.width  * 2.4;
+    const dh = this.height * 1.32;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this._afterImageAlpha * 0.55);
+    ctx.filter      = 'hue-rotate(160deg) brightness(1.4) saturate(2)';
+    ctx.translate(cx, cy);
+    ctx.scale(this._afterImageFlip, 1);
+    ctx.drawImage(this.img, -dw / 2, -dh, dw, dh);
+    ctx.restore();
   }
 
   /* ─── Ground shadow ──────────────────────────────────────── */

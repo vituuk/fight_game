@@ -145,7 +145,7 @@ class Particle {
     ctx.save();
     ctx.globalAlpha = Math.max(0, this.alpha);
 
-    if (this.glow) {
+    if (this.glow && this.alpha > 0.4) {  // skip blur for faded particles
       ctx.shadowColor = this.glow;
       ctx.shadowBlur  = this.radius * 3.5;
     }
@@ -186,13 +186,16 @@ class Particle {
   }
 }
 
-// ── Emitter helpers ───────────────────────────────────────────────────────────
-function emit(config) { particles.push(new Particle(config)); }
+// ── Emitter helpers ─────────────────────────────────────────────────────────
+const MAX_PARTICLES = 120;  // hard cap — prevents particle avalanche during skills
+function emit(config) {
+  if (particles.length < MAX_PARTICLES) particles.push(new Particle(config));
+}
 
 /** Generic punch / hit sparks */
 function createHitSparks(x, y) {
   const cols = ['#fbc531','#ff7675','#fd79a8','#fff','#ffe082'];
-  for (let i = 0; i < 28; i++) {
+  for (let i = 0; i < 16; i++) {  // was 28
     const spd   = 4 + Math.random() * 12;
     const angle = Math.random() * Math.PI * 2;
     emit({
@@ -218,33 +221,31 @@ function createHitSparks(x, y) {
     friction: 0.85,
     life:     0.55,
   });
-
   // Blood Splatter
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 8; i++) {  // was 15
     const spd = 3 + Math.random() * 8;
     const angle = Math.random() * Math.PI * 2;
     emit({
       position: { x, y },
       velocity: { x: Math.cos(angle) * spd, y: Math.sin(angle) * spd - 3 },
       radius:   2 + Math.random() * 4,
-      color:    '#d63031', // Deep blood red
+      color:    '#d63031',
       glow:     '#b71540',
-      tail:     true,      // Stretches as it falls
-      gravity:  0.8,       // Heavy gravity so it splashes toward the floor quickly
+      tail:     true,
+      gravity:  0.8,
       friction: 0.98,
       life:     0.8,
     });
   }
 }
 
-/** Sword attack sparks – silver-blue metallic streaks + sparks */
+/** Sword attack sparks – silver-blue metallic streaks */
 function createSwordSparks(x, y, facingRight) {
   const dir = facingRight ? 1 : -1;
   const cols = ['#e3f2fd','#90caf9','#42a5f5','#fff','#b3e5fc'];
-  // Fast streak sparks forward
-  for (let i = 0; i < 22; i++) {
-    const spd   = 6 + Math.random() * 14;
-    const spread= (Math.random() - 0.5) * 1.8;  // mostly forward
+  for (let i = 0; i < 14; i++) {  // was 22
+    const spd    = 6 + Math.random() * 14;
+    const spread = (Math.random() - 0.5) * 1.8;
     emit({
       position: { x, y: y + (Math.random() - 0.5) * 40 },
       velocity: { x: dir * spd * Math.cos(spread), y: spd * Math.sin(spread) - 3 },
@@ -256,9 +257,8 @@ function createSwordSparks(x, y, facingRight) {
       friction: 0.95,
     });
   }
-  // Ring of small sparks
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
+  for (let i = 0; i < 7; i++) {  // was 12
+    const a = (i / 7) * Math.PI * 2;
     emit({
       position: { x, y },
       velocity: { x: Math.cos(a) * 5, y: Math.sin(a) * 5 },
@@ -277,9 +277,8 @@ function createSwordSparks(x, y, facingRight) {
 function createSlashSparks(x, y, facingRight) {
   const dir  = facingRight ? 1 : -1;
   const cols = ['#80deea','#26c6da','#00bcd4','#e0f7fa','#fff'];
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < 20; i++) {  // was 35
     const spd  = 8 + Math.random() * 16;
-    // Arc mostly forward-down (slash sweep)
     const ang  = (Math.random() * Math.PI * 0.9) - Math.PI * 0.45;
     emit({
       position: { x: x + dir * Math.random() * 30, y: y + (Math.random() - 0.5) * 60 },
@@ -292,7 +291,6 @@ function createSlashSparks(x, y, facingRight) {
       friction: 0.94,
     });
   }
-  // Big flash
   emit({
     position: { x, y },
     velocity: { x: dir * 2, y: -1 },
@@ -346,8 +344,7 @@ function createShieldSparks(x, y) {
 /** Skill (special) sparks – golden energy orbs + ember shower */
 function createSkillSparks(x, y) {
   const cols = ['#ffd54f','#ffb300','#ff6f00','#ffe082','#fff9c4','#ff8f00'];
-  // Large golden orbs
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 10; i++) {  // was 18
     const spd  = 5 + Math.random() * 15;
     const ang  = Math.random() * Math.PI * 2;
     emit({
@@ -361,10 +358,9 @@ function createSkillSparks(x, y) {
       friction: 0.97,
     });
   }
-  // Ember shower (small fast upward)
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 18; i++) {  // was 30
     const spd  = 3 + Math.random() * 10;
-    const ang  = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI;  // upward arc
+    const ang  = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI;
     emit({
       position: { x: x + (Math.random()-0.5)*40, y: y + (Math.random()-0.5)*20 },
       velocity: { x: Math.cos(ang) * spd, y: Math.sin(ang) * spd },
@@ -376,7 +372,6 @@ function createSkillSparks(x, y) {
       friction: 0.95,
     });
   }
-  // Central shockwave flash
   emit({
     position: { x, y },
     velocity: { x: 0, y: 0 },
@@ -397,8 +392,7 @@ function emitSkillAmbient(character) {
   const cy = character.position.y + character.height * 0.45;
 
   if (character.isAttacking) {
-    // Sword stab – quick forward sparks
-    if (Math.random() < 0.45) {
+    if (Math.random() < 0.25) {  // was 0.45 — fewer per frame
       const dir = character.facingRight ? 1 : -1;
       emit({
         position: { x: cx + dir * 55, y: cy + (Math.random()-0.5)*30 },
@@ -415,8 +409,7 @@ function emitSkillAmbient(character) {
   }
 
   if (character.isKnifeAttacking) {
-    // Sword strike – arc of sparks
-    if (Math.random() < 0.6) {
+    if (Math.random() < 0.35) {  // was 0.6
       const dir = character.facingRight ? 1 : -1;
       const ang = (Math.random() - 0.5) * Math.PI * 0.8;
       emit({
@@ -434,28 +427,25 @@ function emitSkillAmbient(character) {
   }
 
   if (character.isSpecialAttacking) {
-    // Special – orbiting + shooting embers
-    const t = Date.now() / 120;
-    for (let i = 0; i < 2; i++) {
-      const ang = t * 3 + i * Math.PI;
-      const r   = 55 + Math.sin(t * 4) * 12;
-      emit({
-        position: { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r * 0.4 },
-        velocity: { x: (Math.random()-0.5)*3, y: -1 - Math.random()*2 },
-        radius:   2 + Math.random() * 3,
-        color:    ['#ffd54f','#ff8f00','#ffecb3','#ffe082'][Math.floor(Math.random()*4)],
-        glow:     '#ffab40',
-        tail:     false,
-        gravity:  0.08,
-        friction: 0.96,
-        life:     0.75,
-      });
-    }
+    // 1 orbiting ember per frame instead of 2
+    const t   = Date.now() / 120;
+    const ang = t * 3;
+    const r   = 55 + Math.sin(t * 4) * 12;
+    emit({
+      position: { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r * 0.4 },
+      velocity: { x: (Math.random()-0.5)*3, y: -1 - Math.random()*2 },
+      radius:   2 + Math.random() * 3,
+      color:    ['#ffd54f','#ff8f00','#ffecb3','#ffe082'][Math.floor(Math.random()*4)],
+      glow:     '#ffab40',
+      tail:     false,
+      gravity:  0.08,
+      friction: 0.96,
+      life:     0.75,
+    });
   }
 
   if (character.isShielding) {
-    // Shield – occasional shimmer sparks on bubble edge
-    if (Math.random() < 0.25) {
+    if (Math.random() < 0.15) {  // was 0.25
       const ang = Math.random() * Math.PI * 2;
       const r   = 72;
       emit({
@@ -492,6 +482,328 @@ const game = {
 };
 
 const particles = [];
+
+// ─── Hero Abilities System ─────────────────────────────────────────────────
+/**
+ * Maps each hero's data-name attribute to its unique active ability.
+ */
+const HERO_ABILITIES = {
+  DEFAULT: { name: 'Fury Storm',   icon: '⚡', key: 'furyStorm',   cooldown: 3000 },
+  DD:      { name: 'Phantom Rush', icon: '👻', key: 'phantomRush', cooldown: 5000 },
+  HARATU:  { name: 'Thunder Clap', icon: '⚡', key: 'thunderClap', cooldown: 4000 },
+  LUFFY:   { name: 'Gear Stretch', icon: '🥊', key: 'gearStretch',  cooldown: 5000 },
+};
+
+/** Flash the ability name in centre-screen */
+function showAbilityBanner(icon, name) {
+  let el = document.getElementById('ability-flash');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ability-flash';
+    Object.assign(el.style, {
+      position:      'absolute',
+      top:           '40%',
+      left:          '50%',
+      transform:     'translate(-50%,-50%) scale(0.6)',
+      fontFamily:    '"Press Start 2P", cursive',
+      fontSize:      '22px',
+      color:         '#fff',
+      textShadow:    '0 0 24px #ffd600, 0 0 6px #000, 3px 3px 0 #000',
+      textAlign:     'center',
+      whiteSpace:    'nowrap',
+      pointerEvents: 'none',
+      zIndex:        '998',
+      opacity:       '0',
+      transition:    'all 0.15s cubic-bezier(.17,.67,.3,1.5)',
+      lineHeight:    '1.5',
+    });
+    document.getElementById('game-container').appendChild(el);
+  }
+  el.textContent = `${icon} ${name}!`;
+  el.style.opacity   = '1';
+  el.style.transform = 'translate(-50%,-50%) scale(1.05)';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => {
+    el.style.opacity   = '0';
+    el.style.transform = 'translate(-50%,-50%) scale(0.8)';
+  }, 900);
+}
+
+/** Update the ability badge HUD (name + cooldown dim) */
+function updateAbilityBadge() {
+  const ab   = HERO_ABILITIES[player.heroKey] || HERO_ABILITIES.DEFAULT;
+  const icon = document.getElementById('ability-badge-icon');
+  const name = document.getElementById('ability-badge-name');
+  if (icon) icon.textContent = ab.icon;
+  if (name) name.textContent = ab.name;
+}
+
+/**
+ * ── ABILITY: Fury Storm (DEFAULT) ─────────────────────────
+ * Classic forward aura burst — same core as the old specialAttack.
+ */
+function abilityFuryStorm() {
+  if (player.isDead || player.isSpecialAttacking) return;
+  const now = Date.now();
+  if (player._lastSpecialTime && now - player._lastSpecialTime < 3000) return;
+  player._lastSpecialTime = now;
+
+  setCooldown('btn-special', 3000);
+  Sound.playSkillCast();
+  selectSkill('skill');
+  player.specialAttack();
+  showAbilityBanner('⚡', 'Fury Storm');
+
+  const px = player.position.x + (player.facingRight ? player.width + 40 : -40);
+  const py = player.position.y + player.height * 0.38;
+  createSkillSparks(px, py);
+}
+
+/**
+ * ── ABILITY: Phantom Rush (DD) ──────────────────────────
+ * Teleport behind the nearest enemy, trigger a backstab burst.
+ */
+function abilityPhantomRush() {
+  if (player.isDead) return;
+  const now = Date.now();
+  if (player._lastSpecialTime && now - player._lastSpecialTime < 5000) return;
+  player._lastSpecialTime = now;
+
+  // Find closest active enemy
+  const enemies = [
+    ...(enemy.isHidden || enemy.isDead ? [] : [enemy]),
+    ...enemyPool.filter(e => !e.isHidden && !e.isDead),
+  ];
+  if (enemies.length === 0) return;
+
+  const target = enemies.reduce((closest, e) => {
+    const d = Math.abs(e.position.x - player.position.x);
+    return d < Math.abs(closest.position.x - player.position.x) ? e : closest;
+  }, enemies[0]);
+
+  // Store after-image at current position
+  player._afterImageX     = player.position.x;
+  player._afterImageY     = player.position.y;
+  player._afterImageFlip  = player.facingRight ? 1 : -1;
+  player._afterImageAlpha = 1.0;
+
+  // Warp behind the target
+  const behindX = target.facingRight
+    ? target.position.x - player.width - 20
+    : target.position.x + target.width + 20;
+  player.position.x  = Math.max(0, Math.min(canvas.width - player.width, behindX));
+  player.facingRight = !target.facingRight; // face same way as target
+
+  // Cyan warp burst at destination
+  const cx = player.position.x + player.width / 2;
+  const cy = player.position.y + player.height * 0.45;
+  for (let i = 0; i < 40; i++) {
+    const a   = (i / 40) * Math.PI * 2;
+    const spd = 5 + Math.random() * 12;
+    emit({
+      position: { x: cx + Math.cos(a) * 20, y: cy + Math.sin(a) * 20 },
+      velocity: { x: Math.cos(a) * spd, y: Math.sin(a) * spd - 3 },
+      radius:   1.5 + Math.random() * 3,
+      color:    ['#00e5ff','#b3e5fc','#fff','#80deea'][Math.floor(Math.random()*4)],
+      glow:     '#00e5ff',
+      tail:     Math.random() < 0.5,
+      gravity:  0.12,
+      friction: 0.93,
+    });
+  }
+  // Flash at old position too
+  const ox = player._afterImageX + player.width / 2;
+  const oy = player._afterImageY + player.height * 0.45;
+  for (let i = 0; i < 20; i++) {
+    const a = Math.random() * Math.PI * 2;
+    emit({
+      position: { x: ox, y: oy },
+      velocity: { x: Math.cos(a) * (3 + Math.random()*7), y: Math.sin(a) * 4 - 2 },
+      radius:   2 + Math.random() * 3,
+      color:    '#00e5ff', glow: '#00bcd4', tail: true,
+      gravity: 0.1, friction: 0.92, life: 0.7,
+    });
+  }
+
+  setCooldown('btn-special', 5000);
+  Sound.playSwordSwing();
+  selectSkill('sword');
+  player.attack();
+  showAbilityBanner('👻', 'Phantom Rush');
+}
+
+/**
+ * ── ABILITY: Thunder Clap (HARATU) ──────────────────────
+ * Ground slam — shockwave ellipse hits ALL active enemies within 300px.
+ */
+function abilityThunderClap() {
+  if (player.isDead) return;
+  const now = Date.now();
+  if (player._lastSpecialTime && now - player._lastSpecialTime < 4000) return;
+  player._lastSpecialTime = now;
+
+  setCooldown('btn-special', 4000);
+  Sound.playSkillCast();
+  selectSkill('skill');
+  player.specialAttack();
+  showAbilityBanner('⚡', 'Thunder Clap');
+
+  const cx = player.position.x + player.width / 2;
+  const cy = player.position.y + player.height;
+
+  // Lightning bolts radially outward
+  for (let i = 0; i < 48; i++) {
+    const a   = (i / 48) * Math.PI * 2;
+    const spd = 8 + Math.random() * 14;
+    emit({
+      position: { x: cx + Math.cos(a)*10, y: cy + Math.sin(a)*6 },
+      velocity: { x: Math.cos(a) * spd, y: Math.sin(a) * spd * 0.45 },
+      radius:   1.5 + Math.random() * 3.5,
+      color:    ['#ffe082','#fff9c4','#ffee58','#fff','#ffd600'][Math.floor(Math.random()*5)],
+      glow:     '#ffd600',
+      tail:     Math.random() < 0.7,
+      gravity:  0.08,
+      friction: 0.93,
+    });
+  }
+  // Central flash
+  emit({
+    position: { x: cx, y: cy - 10 },
+    velocity: { x: 0, y: -0.5 },
+    radius: 32,
+    color: 'rgba(255,230,0,0.7)',
+    glow: '#ffd600', tail: false, gravity: 0, friction: 0.8, life: 0.5,
+  });
+
+  // Damage all enemies within range (bidirectional shockwave)
+  const range = 300;
+  const dmg   = 20;
+  setTimeout(() => {
+    const targets = [
+      ...(enemy.isHidden || enemy.isDead ? [] : [enemy]),
+      ...enemyPool.filter(e => !e.isHidden && !e.isDead),
+    ];
+    targets.forEach(t => {
+      const dist = Math.abs((t.position.x + t.width/2) - cx);
+      if (dist <= range) {
+        t.takeHit(dmg);
+        updateEnemyHealthHUD();
+        createSkillSparks(t.position.x + t.width/2, t.position.y + t.height*0.4);
+      }
+    });
+  }, 200);
+}
+
+/**
+ * ── ABILITY: Gear Stretch (LUFFY) ────────────────────────
+ * Triple attack-reach for 800ms, knocks back on connect.
+ */
+function abilityGearStretch() {
+  if (player.isDead || player._stretchActive) return;
+  const now = Date.now();
+  if (player._lastSpecialTime && now - player._lastSpecialTime < 5000) return;
+  player._lastSpecialTime = now;
+
+  setCooldown('btn-special', 5000);
+  Sound.playSkillCast();
+  showAbilityBanner('🥊', 'Gear Stretch');
+  selectSkill('skill');
+
+  // Triple the attack box
+  player._stretchActive     = true;
+  player._stretchOrigWidth  = player.attackBox.width;
+  player.attackBox.width    = 300;
+
+  // Elastic orange particle trail from player toward enemy direction
+  const dir = player.facingRight ? 1 : -1;
+  const ox  = player.position.x + player.width / 2;
+  const oy  = player.position.y + player.height * 0.38;
+  for (let i = 0; i < 35; i++) {
+    const ext = i / 35;
+    emit({
+      position: { x: ox + dir * ext * 240, y: oy + (Math.random()-0.5) * 20 },
+      velocity: { x: dir * (5 + Math.random()*8), y: (Math.random()-0.5)*4 },
+      radius:   3 + Math.random() * 5,
+      color:    ['#ff8f00','#ffb300','#ffe082','#fff3e0'][Math.floor(Math.random()*4)],
+      glow:     '#ff8f00',
+      tail:     true,
+      gravity:  0.05,
+      friction: 0.96,
+    });
+  }
+
+  // Trigger the actual swing
+  player.knifeAttack();
+
+  // Brief knockback on any hit (patched into takeHit after-effect via flag)
+  player._gearKnockback = true;
+
+  // Restore after 800ms
+  setTimeout(() => {
+    player.attackBox.width = player._stretchOrigWidth || 130;
+    player._stretchActive  = false;
+    player._gearKnockback  = false;
+  }, 800);
+}
+
+/** Master dispatcher — calls the right ability for the equipped hero */
+function useHeroAbility() {
+  if (player.isDead || !gameActive) return;
+  const key = player.heroKey || 'DEFAULT';
+  switch (key) {
+    case 'DD':     abilityPhantomRush(); break;
+    case 'HARATU': abilityThunderClap(); break;
+    case 'LUFFY':  abilityGearStretch(); break;
+    default:       abilityFuryStorm();  break;
+  }
+}
+
+/** Start cooldown dim — pure CSS animation, zero DOM writes per frame */
+function setCooldown(btnId, ms) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.style.setProperty('--cd-ms', ms + 'ms');
+  btn.classList.add('on-cooldown');
+  clearTimeout(btn._cdTimer);
+  btn._cdTimer = setTimeout(() => btn.classList.remove('on-cooldown'), ms);
+}
+
+/** Gear-Stretch rubber-arm draw — called inside animate() each frame */
+function drawGearStretch() {
+  if (!player._stretchActive || player.isDead) return;
+  const dir = player.facingRight ? 1 : -1;
+  const sx  = player.position.x + (player.facingRight ? player.width : 0);
+  const sy  = player.position.y + player.height * 0.35;
+  const ex  = sx + dir * 300;
+
+  const grad = ctx.createLinearGradient(sx, sy, ex, sy);
+  grad.addColorStop(0,   'rgba(255,143,0,0.85)');
+  grad.addColorStop(0.5, 'rgba(255,193,7,0.6)');
+  grad.addColorStop(1,   'rgba(255,255,100,0.1)');
+
+  ctx.save();
+  ctx.strokeStyle = grad;
+  ctx.lineWidth   = 8 + Math.sin(Date.now() / 60) * 3;
+  ctx.lineCap     = 'round';
+  ctx.shadowColor = '#ff8f00';
+  ctx.shadowBlur  = 18;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.bezierCurveTo(
+    sx + dir * 80,  sy - 20,
+    ex - dir * 60,  sy + 15,
+    ex, sy
+  );
+  ctx.stroke();
+  // Fist at tip
+  ctx.beginPath();
+  ctx.arc(ex, sy, 10 + Math.sin(Date.now()/50)*2, 0, Math.PI*2);
+  ctx.fillStyle   = 'rgba(255,180,0,0.9)';
+  ctx.shadowColor = '#ffd600';
+  ctx.shadowBlur  = 24;
+  ctx.fill();
+  ctx.restore();
+}
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 const STAGES = [
@@ -1021,14 +1333,7 @@ function resetRound(omitPlayerPos = false) {
   gameActive       = true;
 
   // --- Player ---
-  player.health             = 100;
-  player.isDead             = false;
-  player.isAttacking        = false;
-  player.isKnifeAttacking   = false;
-  player.isSpecialAttacking = false;
-  player.isShielding        = false;
-  player.velocity.x         = 0;
-  player.velocity.y         = 0;
+  player.reset();
   if (!omitPlayerPos) {
     if (network.role === NetworkRole.CLIENT) {
       player.position.x = 760;
@@ -1041,23 +1346,11 @@ function resetRound(omitPlayerPos = false) {
   }
 
   // --- Remote players: reset health so next round is fair ---
-  Object.values(remotePlayers).forEach(rp => {
-    rp.health             = 100;
-    rp.isDead             = false;
-    rp.isAttacking        = false;
-    rp.isKnifeAttacking   = false;
-    rp.isSpecialAttacking = false;
-    rp.isShielding        = false;
-  });
+  Object.values(remotePlayers).forEach(rp => rp.reset());
 
   // --- Enemy (swap sprite) ---
   let stage = STAGES[currentStageIdx];
-  enemy.health              = 100;
-  enemy.isDead              = false;
-  enemy.isAttacking         = false;
-  enemy.isKnifeAttacking    = false;
-  enemy.isSpecialAttacking  = false;
-  enemy.isShielding         = false;
+  enemy.reset();
   if (network.role === NetworkRole.CLIENT) {
     enemy.position.x = 80;
     enemy.facingRight = true;
@@ -1066,8 +1359,6 @@ function resetRound(omitPlayerPos = false) {
     enemy.facingRight = false;
   }
   enemy.position.y          = 10;
-  enemy.velocity.x          = 0;
-  enemy.velocity.y          = 0;
   enemy.name                = stage.enemyName;
   enemy.accentColor         = stage.accentColor;
   
@@ -1081,18 +1372,11 @@ function resetRound(omitPlayerPos = false) {
   activeExtraCount = roundNum >= 2 ? (1 + Math.floor(Math.random() * 3)) : 0;
 
   enemyPool.forEach((e, i) => {
+    e.reset(); // Reset all pool enemies first
     if (i < activeExtraCount) {
       e.isHidden          = false;
-      e.isDead            = false;
-      e.health            = 100;
-      e.isAttacking       = false;
-      e.isKnifeAttacking  = false;
-      e.isSpecialAttacking= false;
-      e.isShielding       = false;
       e.position.x        = EXTRA_ENEMY_SPAWN_X[i];
       e.position.y        = 10;
-      e.velocity.x        = 0;
-      e.velocity.y        = 0;
       e.facingRight       = false;
       e.name              = stage.enemyName + ' ' + (i + 2);
       e.accentColor       = EXTRA_ENEMY_COLORS[i];
@@ -1282,6 +1566,9 @@ function animate() {
   allFighters.forEach(p => p.update());
   allFighters.forEach(p => emitSkillAmbient(p));
 
+  // Gear Stretch rubber arm visual
+  drawGearStretch();
+
   // Render floating nameplates + HP bars above ALL remote fighters
   allFighters.forEach(p => {
     if (p === player || p.isDead) return;
@@ -1311,54 +1598,77 @@ function animate() {
       if (attacker.isDead || (!attacker.isAttacking && !attacker.isKnifeAttacking && !attacker.isSpecialAttacking)) continue;
       for (let victim of allFighters) {
         if (attacker === victim || victim.isDead) continue;
+
+        // Prevent Friendly Fire: Players only hit Enemies, Enemies only hit Players
+        const attackerIsPlayer = (attacker === player);
+        const victimIsPlayer   = (victim === player);
+        if (attackerIsPlayer === victimIsPlayer) continue; 
         if (rectangularCollision({ rectangle1: attacker, rectangle2: victim })) {
           const hx = victim.position.x + CHAR_W / 2;
           const hy = victim.position.y + CHAR_H * 0.4;
           let dmg = 0;
-          if (attacker.isAttacking) dmg = 10;
-          else if (attacker.isKnifeAttacking) dmg = 15;
+          if (attacker.isAttacking)        dmg = 10;
+          else if (attacker.isKnifeAttacking)  dmg = 15;
           else if (attacker.isSpecialAttacking) dmg = 25;
-          if (dmg > 0) {
-            attacker.isAttacking = false;
-            attacker.isKnifeAttacking = false;
-            attacker.isSpecialAttacking = false;
-            createHitSparks(hx, hy);
-            if (victim.isShielding) createShieldSparks(hx, hy);
-            else if (dmg === 10) createSwordSparks(hx, hy, attacker.facingRight);
-            else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
-            else if (dmg === 25) createSkillSparks(hx, hy);
 
-            if (network.role === NetworkRole.OFFLINE) {
-              // OFFLINE: apply damage directly
-              victim.takeHit(dmg);
-              // Play hit sound
-              if (victim.isShielding)   Sound.playShieldBlock();
-              else if (dmg >= 25)       Sound.playSpecialMove();
-              else if (dmg >= 15)       Sound.playSwordClash();
-              else                      Sound.playPunch();
-              if (victim === player) {
-                game.p1HealthBar.style.width = player.health + '%';
-              } else {
-                // ANY enemy (main or pool) hit -> update the unified HUD bar
-                updateEnemyHealthHUD();
+          // REDUCED DAMAGE: If facing 3+ enemies, player takes 80% less damage
+          const activeEnemies = allFighters.length - 1;
+          if (activeEnemies >= 3 && victim === player && dmg > 0) {
+            dmg = Math.ceil(dmg * 0.2); // 80% reduction
+          }
+
+          if (dmg >= 0 && (attacker.isAttacking || attacker.isKnifeAttacking || attacker.isSpecialAttacking)) {
+            // Regular attacks reset on hit; Special attack stays active (multi-hit window)
+            if (attacker.isAttacking)      attacker.isAttacking      = false;
+            if (attacker.isKnifeAttacking) attacker.isKnifeAttacking = false;
+
+            // Hit-rate limiter: special can hit same enemy max once per 400ms
+            const now = Date.now();
+            victim._lastHitBy = victim._lastHitBy || {};
+            const hitKey = `${attacker === player ? 'p' : 'e'}_sp`;
+            const tooSoon = attacker.isSpecialAttacking 
+              && victim._lastHitBy[hitKey] 
+              && (now - victim._lastHitBy[hitKey] < 400);
+
+            if (!tooSoon) {
+              if (attacker.isSpecialAttacking) victim._lastHitBy[hitKey] = now;
+              
+              createHitSparks(hx, hy);
+              if (victim.isShielding) createShieldSparks(hx, hy);
+              else {
+                if (dmg === 10)      createSwordSparks(hx, hy, attacker.facingRight);
+                else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
+                else if (dmg === 25) createSkillSparks(hx, hy);
               }
 
-            } else if (network.role === NetworkRole.HOST) {
-              // HOST is sole damage authority for ALL collisions (both directions)
-              victim.takeHit(dmg);
-              if (victim === player) game.p1HealthBar.style.width = player.health + '%';
-              const firstId = Object.keys(remotePlayers)[0];
-              if (firstId && victim === remotePlayers[firstId]) {
-                game.p2HealthBar.style.width = victim.health + '%';
+              if (network.role === NetworkRole.OFFLINE) {
+                victim.takeHit(dmg);
+                if (player._gearKnockback && attacker === player) {
+                  const kbDir = attacker.facingRight ? 1 : -1;
+                  victim.velocity.x += kbDir * 14;
+                  victim.velocity.y  = -8;
+                }
+                if (victim.isShielding)   Sound.playShieldBlock();
+                else if (dmg >= 25)       Sound.playSpecialMove();
+                else if (dmg >= 15)       Sound.playSwordClash();
+                else                      Sound.playPunch();
+                
+                if (victim === player) {
+                  game.p1HealthBar.style.width = player.health + '%';
+                } else {
+                  updateEnemyHealthHUD();
+                }
+              } else if (network.role === NetworkRole.HOST) {
+                victim.takeHit(dmg);
+                if (victim === player) game.p1HealthBar.style.width = player.health + '%';
+                const firstId = Object.keys(remotePlayers)[0];
+                if (firstId && victim === remotePlayers[firstId]) {
+                  game.p2HealthBar.style.width = victim.health + '%';
+                }
+              } else if (network.role === NetworkRole.CLIENT && attacker === player) {
+                network.send({ type: 'hit_report', dmg });
               }
-
-            } else if (network.role === NetworkRole.CLIENT && attacker === player) {
-              // CLIENT hit a remote player — report to HOST so it can apply damage authoritatively
-              // (HOST can't reliably detect CLIENT→HOST collisions due to network lag)
-              network.send({ type: 'hit_report', dmg });
-            }
-            // CLIENT: sparks shown above; authoritative HP comes back via host_sync clientHp
-
+            } // end !tooSoon
           }
         }
       }
@@ -1507,11 +1817,11 @@ window.addEventListener('keydown', (e) => {
   switch (e.key) {
     case 'a': case 'A': keys.a.pressed = true;  break;
     case 'd': case 'D': keys.d.pressed = true;  break;
-    case 'w': case 'W': if (player.velocity.y === 0) player.velocity.y = -22; break;
+    case 'w': case 'W': if (player.velocity.y === 0) { player.velocity.y = -22; Sound.playJump(); } break;
     case 's': case 'S': selectSkill('shield'); player.shield(); break;
     case ' ': createSwordSparks(px, py, player.facingRight); player.attack(); e.preventDefault(); break;
     case 'k': case 'K': selectSkill('sword'); createSlashSparks(px, py, player.facingRight); player.knifeAttack(); break;
-    case 'q': case 'Q': selectSkill('skill'); createSkillSparks(px+40, py, player.facingRight); player.specialAttack(); break;
+    case 'q': case 'Q': useHeroAbility(); break;
   }
 });
 
@@ -1562,7 +1872,7 @@ function selectSkill(skill) {
 }
 
 btn('btn-kick',    () => { if (!player.isDead) { selectSkill('sword'); player.knifeAttack(); } });
-btn('btn-special', () => { if (!player.isDead) { selectSkill('skill'); player.specialAttack(); } });
+btn('btn-special', () => { if (!player.isDead) { useHeroAbility(); } });
 btn('btn-shield',  () => { if (!player.isDead) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
 
 // Mute button
@@ -1585,18 +1895,25 @@ heroBtns.forEach(btn => {
     heroBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // 2. Change Player Sprite & Name
+    // 2. Change Player Sprite, Name & HeroKey
     const newSrc  = btn.getAttribute('data-src');
     const newName = btn.getAttribute('data-name');
     
     const img = new Image();
     img.src   = newSrc;
-    player.img  = img;
-    player.name = newName;
+    player.img    = img;
+    player.name   = newName;
+    player.heroKey = newName; // DD | HARATU | LUFFY | DEFAULT
     
     if (p1NameLabel) p1NameLabel.textContent = newName;
+
+    // 3. Update ability badge HUD
+    updateAbilityBadge();
   });
 });
+
+// Seed badge on startup
+updateAbilityBadge();
 
 // ─── Sword Selection ──────────────────────────────────────────────────────────
 const swordBtns = document.querySelectorAll('.sword-btn');
