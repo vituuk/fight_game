@@ -737,3 +737,184 @@ body {
 .lobby-video-mode .game-over-title {
   text-shadow: 0 0 60px #fbc531, 0 0 20px #fbc531, 4px 4px 0 #000;
 }
+
+
+
+
+
+.game-over-title {
+  font-size: 38px;
+  color: #fff;
+  text-shadow: 0 0 40px #fbc531, 4px 4px 0 #000;
+  letter-spacing: 6px;
+  animation: titlePulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes titlePulse {
+  from { filter: brightness(1); }
+  to   { filter: brightness(1.4) drop-shadow(0 0 20px #fbc531); }
+}
+
+.game-over-sub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.65);
+  letter-spacing: 2px;
+}
+
+.retry-btn {
+  margin-top: 12px;
+  padding: 14px 40px;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 12px;
+  color: #000;
+  background: linear-gradient(135deg, #fbc531, #f0a500);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(251,197,49,0.7), 4px 4px 0 #7a5200;
+  transition: transform 0.1s, filter 0.1s;
+  letter-spacing: 1px;
+}
+.retry-btn:hover { filter: brightness(1.2); transform: scale(1.06); }
+.retry-btn:active { transform: scale(0.94); }
+
+
+/* ─── Ability Badge (above Skill button) ──────────────────── */
+.ability-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 200, 0, 0.18) 0%,
+    rgba(255, 80, 0, 0.22) 100%
+  );
+  border: 1px solid rgba(255, 200, 0, 0.45);
+  border-radius: 10px;
+  padding: 4px 7px 4px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  box-shadow:
+    0 0 12px rgba(255, 180, 0, 0.4),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+  min-width: 54px;
+  position: relative;
+  overflow: hidden;
+  animation: abPulse 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes abPulse {
+  from { box-shadow: 0 0 10px rgba(255,180,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12); }
+  to   { box-shadow: 0 0 22px rgba(255,220,0,0.65), inset 0 1px 0 rgba(255,255,255,0.12); }
+}
+
+.ab-icon {
+  font-size: 14px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px #ffd600);
+}
+
+.ab-name {
+  font-size: 5.5px;
+  color: #fff9c4;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px #ff8f00, 1px 1px 0 #000;
+  white-space: nowrap;
+  font-family: 'Press Start 2P', cursive;
+}
+
+.ab-key {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 5px;
+  color: rgba(255,220,80,0.85);
+  font-family: 'Press Start 2P', cursive;
+  background: rgba(0,0,0,0.35);
+  border-radius: 2px;
+  padding: 1px 3px;
+  line-height: 1;
+}
+
+/* Cooldown sweep ring — native CSS @property animation (zero JS per frame) */
+@property --cd-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.action-btn.on-cooldown {
+  filter: grayscale(85%) brightness(0.55);
+  transition: filter 0.3s ease;
+}
+.action-btn:not(.on-cooldown) {
+  transition: filter 0.5s ease;
+}
+
+#btn-special.on-cooldown::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    rgba(0,0,0,0.55) var(--cd-angle),
+    transparent var(--cd-angle)
+  );
+  pointer-events: none;
+  z-index: 1;
+  --cd-angle: 0deg;
+  animation: cdSweep var(--cd-ms, 3000ms) linear forwards;
+}
+
+@keyframes cdSweep {
+  from { --cd-angle: 0deg; }
+  to   { --cd-angle: 360deg; }
+}
+
+/* Remove old static rule — superseded by .on-cooldown version above */
+
+/* ─── Lobby video background mode ─────────────────────────── */
+.lobby-video-mode {
+  /* Replace the solid black with a translucent dark gradient so
+     the hero1.mp4 video behind shows through */
+  background: linear-gradient(
+    135deg,
+    rgba(0,0,0,0.55) 0%,
+    rgba(10,0,30,0.62) 100%
+  ) !important;
+  backdrop-filter: blur(2px) !important;
+}
+/* Brighter title text so it pops over the video */
+.lobby-video-mode .game-over-title {
+  text-shadow: 0 0 60px #fbc531, 0 0 20px #fbc531, 4px 4px 0 #000;
+}
+
+/* ─── Mute Button Styling ────────────────────────────────────── */
+#btn-mute {
+  position: absolute;
+  top: 60px;
+  right: 15px;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #fbc531;
+  color: #fff;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  transition: all 0.2s;
+  padding: 0;
+}
+
+#btn-mute:hover {
+  transform: scale(1.1);
+  background: rgba(0, 0, 0, 0.8);
+}

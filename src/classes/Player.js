@@ -517,53 +517,33 @@ export class Player {
         break;
       }
 
-      /* ── SHIELD ───────────────────────────────────────────── */
+      /* ── REIMAGINED METALLIC FIRE SHIELD ──────────────────────────────────── */
       case 'shield': {
-        if (!this.imgShield.complete || !this.imgShield.naturalWidth) break;
-
-        const SZ = 90;   // shield draw size
+        const SZ = 170; // Massively increased overall shield size
         let tx = 34, ty = -this.height * 0.50, angle = -0.18;
+        const tNow = Date.now() / 150;
 
         if (state === 'shield' || this.isShielding) {
-          // Full block stance: shield raised
           tx = 38; ty = -this.height * 0.56; angle = -0.30;
-          ctx.save();
-          ctx.shadowColor = '#64b5f6';
-          ctx.shadowBlur  = 28;
-          ctx.translate(tx, ty);
-          ctx.rotate(angle);
-          ctx.drawImage(this.imgShield, -SZ * 0.25, -SZ * 0.55, SZ, SZ);
-          ctx.restore();
         } else if (state === 'punch') {
-          // Shield bash forward
           const ext = Math.min(f / 5, 1);
           tx = 32 + ext * 18; angle = -0.1 - ext * 0.15;
-          ctx.save();
-          ctx.shadowColor = '#4fc3f7';
-          ctx.shadowBlur  = 18;
-          ctx.translate(tx, ty);
-          ctx.rotate(angle);
-          ctx.drawImage(this.imgShield, -SZ * 0.25, -SZ * 0.55, SZ, SZ);
-          ctx.restore();
         } else if (state === 'special') {
-          // Shield spin / glow
-          const spin = f * 0.5; // Fast spin
-          ctx.save();
-          ctx.translate(42, -this.height * 0.5);
-          ctx.rotate(spin);
-          ctx.shadowColor = '#7c4dff';
-          ctx.shadowBlur  = 30;
-          ctx.drawImage(this.imgShield, -SZ / 2, -SZ / 2, SZ, SZ);
-          ctx.restore();
+          tx = 42; ty = -this.height * 0.5; angle = f * 0.5;
         } else {
-          // REST – held in front arm, gently bobbing
           const bob = Math.sin(t * 1.2) * 0.05;
-          ctx.save();
-          ctx.translate(tx, ty + Math.sin(t * 1.2) * 2);
-          ctx.rotate(angle + bob);
-          ctx.drawImage(this.imgShield, -SZ * 0.25, -SZ * 0.55, SZ, SZ);
-          ctx.restore();
+          ty += Math.sin(t * 1.2) * 2; angle += bob;
         }
+
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(angle);
+        // Translate to the middle visual center for the new vector draw
+        ctx.translate(SZ*0.25, -SZ*0.05);
+
+        this._drawReimaginedFireShield(ctx, SZ, tNow);
+        
+        ctx.restore();
         break;
       }
 
@@ -653,8 +633,8 @@ export class Player {
         this._shieldGrdBucket = bucket;
         const r = 76;
         this._shieldGrd = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
-        this._shieldGrd.addColorStop(0, 'rgba(100,200,255,0.85)');
-        this._shieldGrd.addColorStop(1, 'rgba(0,60,220,0.0)');
+        this._shieldGrd.addColorStop(0, 'rgba(255,200,0,0.85)'); // fiery gold inner
+        this._shieldGrd.addColorStop(1, 'rgba(255,50,0,0.0)');   // red outer
       }
       ctx.save();
       ctx.globalAlpha = 0.40 + Math.sin(this._t * 4) * 0.08;
@@ -662,7 +642,7 @@ export class Player {
       ctx.beginPath();
       ctx.ellipse(cx, cy, 76, 76 * 1.1, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(160,230,255,0.65)';
+      ctx.strokeStyle = 'rgba(255,150,0,0.65)'; // fiery border
       ctx.lineWidth   = 2;
       ctx.stroke();
       ctx.restore();
@@ -718,22 +698,179 @@ export class Player {
       ctx.restore();
     }
 
-    // Sword attack trail
-    if ((this.isAttacking || this.isKnifeAttacking) && this.equippedSkill === 'sword') {
-      const startA = this.facingRight ? -1.5 : Math.PI + 1.5;
-      const endA   = this.facingRight ?  0.5 : Math.PI - 0.5;
+    // Fiery attack trail ("Break Fire" Swirl - Image Match)
+    if ((this.isAttacking || this.isKnifeAttacking) && !this.isEnemy) {
       ctx.save();
-      ctx.globalAlpha  = 0.65;
-      ctx.strokeStyle  = '#a0d8ff';
-      ctx.lineWidth    = 6;
-      ctx.shadowColor  = '#7ef';
-      ctx.shadowBlur   = 24;
-      ctx.lineCap      = 'round';
+      const cy = this.position.y + this.height * 0.65;
+      const xOff = this.facingRight ? 55 : -55; // Pushed out a bit more for the bigger size
+      const dir = this.facingRight ? 1 : -1;
+      const tNow = Date.now() / 150; // fast spin rotation
+      
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(cx + xOff, cy);
+
+      // --- NEW: Exploding, pulsing hot core ---
       ctx.beginPath();
-      ctx.arc(cx, this.position.y + this.height * 0.42, 85, startA, endA, !this.facingRight);
-      ctx.stroke();
+      ctx.arc(0, 0, 50 + Math.random() * 20, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 180, 0, 0.3)';
+      ctx.shadowColor = '#ff3d00';
+      ctx.shadowBlur = 80;
+      ctx.fill();
+      
+      // Draw 3 HUGE layered crescent swirls crossing and spinning
+      const rings = [
+        // Outer massive red-orange sweep
+        { color: 'rgba(255, 60, 0, 0.5)',  glow: '#ff2000', blur: 60, scale: 1.9, rot: tNow * dir },
+        // Middle intense orange sweep (opposing side)
+        { color: 'rgba(255, 120, 0, 0.8)', glow: '#ff7b00', blur: 30, scale: 1.5, rot: tNow * dir * 1.5 + Math.PI },
+        // Inner blazing yellow sweep (perpendicular)
+        { color: 'rgba(255, 240, 50, 1.0)', glow: '#ffffff', blur: 15, scale: 1.1, rot: tNow * dir * 2.5 + Math.PI * 0.5 }
+      ];
+
+      rings.forEach(ring => {
+        ctx.save();
+        ctx.rotate(ring.rot);
+        ctx.scale(ring.scale, ring.scale);
+        
+        ctx.beginPath();
+        // Start Top Point
+        ctx.moveTo(0, -110);
+        // Outer swept edge of the crescent (much thicker and wider)
+        ctx.bezierCurveTo(dir * 160, -90, dir * 190, 70, 0, 150);
+        // Inner sweeping edge wrapping back
+        ctx.bezierCurveTo(dir * 110, 80, dir * 110, -50, 0, -110);
+
+        ctx.fillStyle = ring.color;
+        ctx.shadowColor = ring.glow;
+        ctx.shadowBlur = ring.blur;
+        ctx.fill();
+        
+        // Bonus inner bright outline for the sickle
+        ctx.strokeStyle = ring.color.replace(/0\.\d+\)/, '1.0)'); // force fully opaque line
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 10]);
+        ctx.stroke();
+        
+        ctx.restore();
+      });
       ctx.restore();
     }
+  }
+
+  /* ─── Reimagined Metallic Fire Shield ───────────────────── */
+  _drawReimaginedFireShield(ctx, SZ, tNow) {
+    const scale = SZ / 100;
+    ctx.save();
+    ctx.scale(scale, scale);
+    
+    // --- 1. AMBIENT HEAT GLOW ---
+    ctx.globalCompositeOperation = 'lighter';
+    const bgGrd = ctx.createRadialGradient(0, 0, 10, 0, 0, 90);
+    bgGrd.addColorStop(0, 'rgba(255, 100, 0, 0.4)');
+    bgGrd.addColorStop(1, 'rgba(255, 0, 0, 0.0)');
+    ctx.fillStyle = bgGrd;
+    ctx.beginPath();
+    ctx.arc(0, 0, 90, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- 2. RAGING FLAMES HUGGING THE SHIELD ---
+    const drawFlame = (xOff, yOff, height, width, color, pulseOff) => {
+       const pulse = Math.sin(tNow * 10 + pulseOff);
+       ctx.beginPath();
+       ctx.moveTo(xOff, yOff);
+       ctx.quadraticCurveTo(xOff + width, yOff - height * 0.5, xOff + width * 0.2 + pulse * 10, yOff - height);
+       ctx.quadraticCurveTo(xOff - width, yOff - height * 0.5, xOff, yOff);
+       ctx.fillStyle = color;
+       ctx.shadowColor = color.replace(/0\.\d+\)/, '1.0)');
+       ctx.shadowBlur = 15;
+       ctx.fill();
+    };
+    
+    // Base flames wrapping the sides and bottom
+    for (let i = 0; i < 7; i++) {
+        const side = i % 2 === 0 ? 1 : -1;
+        const xStart = side * (20 + Math.random() * 20);
+        const yStart = 20 + Math.random() * 40;
+        drawFlame(
+          xStart, yStart, 
+          60 + Math.random() * 40, 
+          15 + Math.random() * 15, 
+          i < 3 ? 'rgba(255,180,0,0.8)' : 'rgba(255,80,0,0.6)', 
+          i
+        );
+    }
+    
+    // --- 3. THE BLUE METALLIC SHIELD BODY ---
+    ctx.globalCompositeOperation = 'source-over';
+    
+    const traceShield = () => {
+        ctx.beginPath();
+        ctx.moveTo(0, -45); // top mid
+        ctx.quadraticCurveTo(20, -50, 45, -50); // top right
+        ctx.bezierCurveTo(45, 10, 20, 50, 0, 70); // right swoop
+        ctx.bezierCurveTo(-20, 50, -45, 10, -45, -50); // left swoop
+        ctx.quadraticCurveTo(-20, -50, 0, -45); // top left
+        ctx.closePath();
+    };
+
+    // Right Side (Light Blue Bevel)
+    ctx.save();
+    traceShield();
+    ctx.clip();
+    const rGrd = ctx.createLinearGradient(0, -60, 45, 20);
+    rGrd.addColorStop(0, '#17365c');
+    rGrd.addColorStop(1, '#0b1c31');
+    ctx.fillStyle = rGrd;
+    ctx.fillRect(-80, -80, 160, 180);
+    ctx.restore();
+
+    // Left Side (Dark Blue Bevel)
+    ctx.save();
+    traceShield();
+    ctx.clip();
+    const lGrd = ctx.createLinearGradient(0, -60, -45, 20);
+    lGrd.addColorStop(0, '#0e233d');
+    lGrd.addColorStop(1, '#050c14');
+    ctx.fillStyle = lGrd;
+    ctx.fillRect(-80, -80, 80, 180); // only covers left half
+    ctx.restore();
+
+    // Center crease
+    ctx.beginPath();
+    ctx.moveTo(0, -45);
+    ctx.lineTo(0, 70);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.stroke();
+
+    // --- 4. THE GLOWING GOLDEN RIM ---
+    ctx.globalCompositeOperation = 'lighter';
+    traceShield();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#ff6000';
+    ctx.shadowColor = '#ff2000';
+    ctx.shadowBlur = 20;
+    ctx.stroke();
+
+    traceShield();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffee00';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 5;
+    ctx.stroke();
+    
+    // --- 5. FLOATING RISING EMBERS ---
+    for (let e = 0; e < 12; e++) {
+       const ey = ((tNow * 150 + e * 30) % 180) - 90; 
+       const ex = Math.sin(tNow * 5 + e) * 50;
+       ctx.beginPath();
+       ctx.arc(ex, -ey, Math.random() * 2 + 1, 0, Math.PI*2);
+       ctx.fillStyle = 'rgba(255, 220, 100, 0.9)';
+       ctx.shadowBlur = 10;
+       ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   /* ─── After-image ghost (Phantom Rush) ──────────────────── */

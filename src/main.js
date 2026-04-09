@@ -392,56 +392,69 @@ function emitSkillAmbient(character) {
   const cy = character.position.y + character.height * 0.45;
 
   if (character.isAttacking) {
-    if (Math.random() < 0.25) {  // was 0.45 — fewer per frame
+    if (Math.random() < 0.35) {  // increased spawn rate for 'break fire'
       const dir = character.facingRight ? 1 : -1;
       emit({
         position: { x: cx + dir * 55, y: cy + (Math.random()-0.5)*30 },
-        velocity: { x: dir * (3 + Math.random()*6), y: (Math.random()-0.5)*4 - 1 },
-        radius:   1 + Math.random() * 2,
-        color:    Math.random() < 0.5 ? '#90caf9' : '#fff',
-        glow:     '#4fc3f7',
+        velocity: { x: dir * (6 + Math.random()*8), y: (Math.random()-0.5)*5 - 1 }, // faster blast
+        radius:   1.5 + Math.random() * 2.5,
+        color:    ['#ffab40', '#ff6d00', '#ffd54f', '#fff'][Math.floor(Math.random()*4)],
+        glow:     '#ff3d00',
         tail:     true,
-        gravity:  0.12,
+        gravity:  0.08,
+        friction: 0.92,
+        life:     0.8,
+      });
+    }
+  }
+
+  if (character.isKnifeAttacking) {
+    if (Math.random() < 0.45) {  // increased spawn rate for heavier 'break fire'
+      const dir = character.facingRight ? 1 : -1;
+      const ang = (Math.random() - 0.5) * Math.PI * 0.8;
+      emit({
+        position: { x: cx + dir * (40 + Math.random()*50), y: cy + (Math.random()-0.5)*50 },
+        velocity: { x: dir * Math.cos(ang) * (8+Math.random()*12), y: Math.sin(ang) * 8 - 2 },
+        radius:   2 + Math.random() * 3,
+        color:    ['#ff6d00','#ff3d00','#ffea00','#fff'][Math.floor(Math.random()*4)],
+        glow:     '#ff9100',
+        tail:     true,
+        gravity:  0.15,
         friction: 0.94,
         life:     0.7,
       });
     }
   }
 
-  if (character.isKnifeAttacking) {
-    if (Math.random() < 0.35) {  // was 0.6
-      const dir = character.facingRight ? 1 : -1;
-      const ang = (Math.random() - 0.5) * Math.PI * 0.8;
+  if (character.isSpecialAttacking && !character.isEnemy) {
+    // Fire particles emitted on the circle's circumference
+    const R = 130;
+    const t = Date.now() / 120;
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 2.8 + (i / 3) * Math.PI * 2;
+      const rx  = cx + Math.cos(ang) * R;
+      const ry  = cy + Math.sin(ang) * R * 0.55;
       emit({
-        position: { x: cx + dir * (40 + Math.random()*40), y: cy + (Math.random()-0.5)*50 },
-        velocity: { x: dir * Math.cos(ang) * (4+Math.random()*8), y: Math.sin(ang) * 6 - 2 },
-        radius:   1.5 + Math.random() * 2.5,
-        color:    ['#00e5ff','#80deea','#e0f7fa','#fff'][Math.floor(Math.random()*4)],
-        glow:     '#00bcd4',
-        tail:     true,
-        gravity:  0.18,
-        friction: 0.93,
-        life:     0.65,
+        position: { x: rx, y: ry },
+        velocity: { x: Math.cos(ang) * 1.5 + (Math.random()-0.5)*2, y: -3 - Math.random()*4 },
+        radius:   2 + Math.random() * 4,
+        color:    ['#fff9c4','#ffd54f','#ffb300','#ff8f00','#fff'][Math.floor(Math.random()*5)],
+        glow:     '#ff6f00', tail: true, gravity: -0.06, friction: 0.97, life: 0.85,
       });
     }
-  }
-
-  if (character.isSpecialAttacking) {
-    // 1 orbiting ember per frame instead of 2
-    const t   = Date.now() / 120;
-    const ang = t * 3;
-    const r   = 55 + Math.sin(t * 4) * 12;
-    emit({
-      position: { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r * 0.4 },
-      velocity: { x: (Math.random()-0.5)*3, y: -1 - Math.random()*2 },
-      radius:   2 + Math.random() * 3,
-      color:    ['#ffd54f','#ff8f00','#ffecb3','#ffe082'][Math.floor(Math.random()*4)],
-      glow:     '#ffab40',
-      tail:     false,
-      gravity:  0.08,
-      friction: 0.96,
-      life:     0.75,
-    });
+    // Occasional lightning spark around the ring
+    if (Math.random() < 0.25) {
+      const ang = Math.random() * Math.PI * 2;
+      const rx  = cx + Math.cos(ang) * R;
+      const ry  = cy + Math.sin(ang) * R * 0.55;
+      emit({
+        position: { x: rx, y: ry },
+        velocity: { x: (Math.random()-0.5)*8, y: (Math.random()-0.5)*8 },
+        radius:   1 + Math.random() * 2,
+        color:    Math.random() < 0.5 ? '#fff' : '#b3e5fc',
+        glow:     '#fff9c4', tail: true, gravity: 0.05, friction: 0.92, life: 0.7,
+      });
+    }
   }
 
   if (character.isShielding) {
@@ -538,9 +551,131 @@ function updateAbilityBadge() {
   if (name) name.textContent = ab.name;
 }
 
+// ── Skill circle VFX state ───────────────────────────────────────────────
+let _skillCircleActive = false;
+let _skillCircleEnd    = 0;
+
 /**
- * ── ABILITY: Fury Storm (DEFAULT) ─────────────────────────
- * Classic forward aura burst — same core as the old specialAttack.
+ * drawSkillCircle — called every frame from the game loop.
+ * Draws a large glowing fire+lightning ring around the player while
+ * the skill is active, and fires arcs toward enemies.
+ */
+function drawSkillCircle() {
+  if (!_skillCircleActive || player.isDead) return;
+  if (Date.now() > _skillCircleEnd) { _skillCircleActive = false; return; }
+
+  const cx = player.position.x + player.width  / 2;
+  const cy = player.position.y + player.height * 0.45;
+  const R  = 130;  // ring radius
+  const t  = Date.now() / 220;
+
+  ctx.save();
+
+  // ── 1. Outer fire glow ring ──────────────────────────────────────────────
+  ctx.lineCap     = 'round';
+  ctx.shadowColor = '#ff6f00';
+  ctx.shadowBlur  = 40;
+  ctx.strokeStyle = `rgba(255,100,0,${0.35 + Math.sin(t * 2.5) * 0.18})`;
+  ctx.lineWidth   = 28;
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R + Math.sin(t * 3) * 6, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // ── 2. Main bright fire ring ─────────────────────────────────────────────
+  ctx.shadowColor = '#ffd600';
+  ctx.shadowBlur  = 55;
+  ctx.strokeStyle = `rgba(255,210,0,${0.72 + Math.sin(t * 4) * 0.22})`;
+  ctx.lineWidth   = 10;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R + Math.sin(t * 3.5) * 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // ── 3. White-hot core ring ───────────────────────────────────────────────
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur  = 28;
+  ctx.strokeStyle = `rgba(255,255,230,${0.85 + Math.sin(t * 5) * 0.14})`;
+  ctx.lineWidth   = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R + Math.sin(t * 4) * 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // ── 4. Short lightning arcs crackling around the ring ───────────────────
+  if (Math.floor(t * 6) % 2 === 0) {
+    const a1 = Math.random() * Math.PI * 2;
+    const px1 = cx + Math.cos(a1) * R;
+    const py1 = cy + Math.sin(a1) * R * 0.55;
+    const a2  = a1 + (Math.random() - 0.5) * 1.6;
+    const px2 = cx + Math.cos(a2) * (R + 30 + Math.random() * 40);
+    const py2 = cy + Math.sin(a2) * (R + 30 + Math.random() * 40) * 0.55;
+    _drawZigzag(ctx, px1, py1, px2, py2, '#fff9c4', 1.5, 8);
+  }
+
+  // ── 5. Lightning bolts toward enemies (every ~400ms flash) ───────────────
+  if (Math.floor(Date.now() / 180) !== (_drawSkillCircle_lastFlash || 0)) {
+    _drawSkillCircle_lastFlash = Math.floor(Date.now() / 180);
+    if (Math.random() < 0.30) {
+      const targets = [
+        ...(enemy.isHidden || enemy.isDead ? [] : [enemy]),
+        ...enemyPool.filter(e => !e.isHidden && !e.isDead),
+      ];
+      targets.forEach(tgt => {
+        const tx = tgt.position.x + tgt.width  / 2;
+        const ty = tgt.position.y + tgt.height * 0.35;
+        _drawZigzag(ctx, cx, cy - 30, tx, ty, '#ffffff', 2.5, 14);
+        _drawZigzag(ctx, cx, cy - 30, tx, ty, '#b3e5fc', 1.2, 12);
+        // Splash sparks at target
+        for (let i = 0; i < 8; i++) {
+          const a = Math.random() * Math.PI * 2;
+          emit({
+            position: { x: tx + (Math.random()-0.5)*16, y: ty + (Math.random()-0.5)*16 },
+            velocity: { x: Math.cos(a)*6, y: Math.sin(a)*6 - 2 },
+            radius:   1 + Math.random() * 2.5,
+            color:    Math.random() < 0.5 ? '#fff' : '#b3e5fc',
+            glow:     '#fff9c4', tail: true, gravity: 0.15, friction: 0.93, life: 0.8,
+          });
+        }
+      });
+    }
+  }
+}
+let _drawSkillCircle_lastFlash = 0;
+
+/** Jagged zigzag lightning line between two points */
+function _drawZigzag(ctx, x1, y1, x2, y2, color, lw, segs) {
+  const pts = [[x1, y1]];
+  for (let i = 1; i < segs; i++) {
+    const t  = i / segs;
+    const jx = (Math.random() - 0.5) * 40;
+    const jy = (Math.random() - 0.5) * 20;
+    pts.push([x1 + (x2 - x1) * t + jx, y1 + (y2 - y1) * t + jy]);
+  }
+  pts.push([x2, y2]);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth   = lw * 3;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = 18;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  pts.slice(1).forEach(([px, py]) => ctx.lineTo(px, py));
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = lw;
+  ctx.shadowBlur  = 10;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  pts.slice(1).forEach(([px, py]) => ctx.lineTo(px, py));
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * ── ABILITY: Fury Storm (DEFAULT) ─────────────────────────────────────────
+ * Activates shining fire circle + fires 3 lightning strikes during 2s window.
  */
 function abilityFuryStorm() {
   if (player.isDead || player.isSpecialAttacking) return;
@@ -554,9 +689,69 @@ function abilityFuryStorm() {
   player.specialAttack();
   showAbilityBanner('⚡', 'Fury Storm');
 
+  // Activate the glowing circle for 2.2 seconds
+  _skillCircleActive = true;
+  _skillCircleEnd    = Date.now() + 2200;
+
+  // Burst fire sparks at attack point
   const px = player.position.x + (player.facingRight ? player.width + 40 : -40);
   const py = player.position.y + player.height * 0.38;
   createSkillSparks(px, py);
+
+  // Screen flash
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle   = '#fff9c4';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  // Lightning strikes at 0, 400, 900ms
+  const fireBolt = () => {
+    if (player.isDead) return;
+    const sx = player.position.x + player.width / 2;
+    const sy = player.position.y + player.height * 0.25;
+    const targets = [
+      ...(enemy.isHidden || enemy.isDead ? [] : [enemy]),
+      ...enemyPool.filter(e => !e.isHidden && !e.isDead),
+    ];
+    targets.forEach(tgt => {
+      const tx = tgt.position.x + tgt.width  / 2;
+      const ty = tgt.position.y + tgt.height * 0.35;
+      _drawZigzag(ctx, sx, sy, tx, ty, '#ffffff', 3, 14);
+      _drawZigzag(ctx, sx, sy, tx, ty, '#fffde7', 1.5, 12);
+      // Branch bolt from midpoint
+      const mx = (sx + tx) / 2 + (Math.random()-0.5) * 60;
+      const my = (sy + ty) / 2 + (Math.random()-0.5) * 30;
+      _drawZigzag(ctx, mx, my, tx + (Math.random()-0.5)*80, ty + 40 + Math.random()*40, '#b3e5fc', 1, 7);
+      // Screen flash
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle   = '#e8f5ff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      // Sparks at impact
+      for (let i = 0; i < 14; i++) {
+        const a = Math.random() * Math.PI * 2;
+        emit({
+          position: { x: tx+(Math.random()-0.5)*18, y: ty+(Math.random()-0.5)*18 },
+          velocity: { x: Math.cos(a)*8, y: Math.sin(a)*8 - 3 },
+          radius:   1.5 + Math.random() * 3,
+          color:    ['#fff','#fffde7','#ffe082','#b3e5fc'][Math.floor(Math.random()*4)],
+          glow: '#fff9c4', tail: true, gravity: 0.12, friction: 0.93, life: 0.85,
+        });
+      }
+      // Balanced skill damage: deals 15 damage per bolt (45 total over 3 hits)
+      if (typeof tgt.takeHit === 'function') {
+        tgt.takeHit(15);
+        if (typeof updateEnemyHealthHUD === 'function') {
+          updateEnemyHealthHUD();
+        }
+      }
+    });
+  };
+  fireBolt();
+  setTimeout(fireBolt, 400);
+  setTimeout(fireBolt, 900);
 }
 
 /**
@@ -1007,8 +1202,8 @@ function createAI(target) {
         if (player.position.y < target.position.y - 100 && grounded) target.velocity.y = -20;
         if (absDx <= 130) {  // CLOSE_DIST ≈ CHAR_W(80) + 50
           const r = Math.random();
-          state = r < 0.35 ? 'punch' : r < 0.55 ? 'kick' : r < 0.65 ? 'special' :
-                  r < 0.75 ? 'shield' : r < 0.85 ? 'jump_atk' : 'back_off';
+          // No special or shield — enemies only punch, kick, jump-attack, or back off
+          state = r < 0.40 ? 'punch' : r < 0.70 ? 'kick' : r < 0.85 ? 'jump_atk' : 'back_off';
           timer = 0;
         }
         break;
@@ -1022,19 +1217,9 @@ function createAI(target) {
         if (timer === 12 && !cd) { target.knifeAttack(); cd = 65; }
         if (timer === 30) { state = 'approach'; timer = 0; }
         break;
-      case 'special':
-        target.velocity.x = 0;
-        if (timer === 12 && !cd) { target.specialAttack(); cd = 120; }
-        if (timer === 60) { state = 'approach'; timer = 0; }
-        break;
       case 'back_off':
         target.velocity.x = dx > 0 ? -4 : 4;  // -AI_SPEED
         if (timer > 28) { state = 'approach'; timer = 0; }
-        break;
-      case 'shield':
-        target.velocity.x = 0;
-        target.shield();
-        if (timer > 40) { target.stopShield(); state = 'punch'; timer = 0; }
         break;
       case 'jump_atk':
         if (timer === 1 && grounded) { target.velocity.y = -22; target.velocity.x = dx > 0 ? 4 : -4; }
@@ -1145,13 +1330,12 @@ function tickEnemyAI() {
       }
 
       if (absDx <= CLOSE_DIST) {
+        // No special or shield — enemy only punches, kicks, jump-attacks, or backs off
         const roll = Math.random();
-        if      (roll < 0.30) { aiState = AI.PUNCH;     }
-        else if (roll < 0.50) { aiState = AI.KICK;      }
-        else if (roll < 0.62) { aiState = AI.SPECIAL;   }
-        else if (roll < 0.72) { aiState = AI.SHIELD;    }
-        else if (roll < 0.82) { aiState = AI.JUMP_ATK;  }
-        else                  { aiState = AI.BACK_OFF;  }
+        if      (roll < 0.40) { aiState = AI.PUNCH;    }
+        else if (roll < 0.70) { aiState = AI.KICK;     }
+        else if (roll < 0.85) { aiState = AI.JUMP_ATK; }
+        else                  { aiState = AI.BACK_OFF; }
         aiTimer = 0;
       }
       break;
@@ -1173,40 +1357,10 @@ function tickEnemyAI() {
       break;
     }
 
-    // Charge up then fire
-    case AI.SPECIAL: {
-      enemy.velocity.x = 0;
-      if (aiTimer === 10 && !aiCooldown) { enemy.specialAttack(); aiCooldown = 110; }
-      if (aiTimer === 55) { aiState = AI.APPROACH; aiTimer = 0; }
-      break;
-    }
-
     // Retreat to reset
     case AI.BACK_OFF: {
       enemy.velocity.x = dx > 0 ? -AI_SPEED * 1.2 : AI_SPEED * 1.2;
       if (aiTimer > 30) { aiState = AI.APPROACH; aiTimer = 0; }
-      break;
-    }
-
-    // Jump BACK away
-    case AI.JUMP_BACK: {
-      if (aiTimer === 1 && grounded) {
-        enemy.velocity.y = -18;
-        enemy.velocity.x = dx > 0 ? -AI_SPEED * 2 : AI_SPEED * 2;
-      }
-      if (aiTimer > 38) { aiState = AI.APPROACH; aiTimer = 0; }
-      break;
-    }
-
-    // Shielding
-    case AI.SHIELD: {
-      enemy.velocity.x = 0;
-      enemy.shield();
-      if (aiTimer > 45) {
-        enemy.stopShield();
-        aiState = Math.random() < 0.6 ? AI.PUNCH : AI.KICK;
-        aiTimer = 0;
-      }
       break;
     }
 
@@ -1568,6 +1722,9 @@ function animate() {
 
   // Gear Stretch rubber arm visual
   drawGearStretch();
+
+  // Shining fire circle + lightning while skill is active
+  drawSkillCircle();
 
   // Render floating nameplates + HP bars above ALL remote fighters
   allFighters.forEach(p => {
