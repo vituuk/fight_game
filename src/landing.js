@@ -81,8 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
       desc: 'The standard combatant balanced for all play styles. Master the basics before venturing further.'
     },
     dd: {
-      img: '/assets/hero/dd-removebg-preview.png',
-      name: 'DD (DARK DEMON)',
+      img: '/assets/hero/naruto_uzumaki.png',
+      name: 'NARUTO UZUMAKI',
       desc: 'An aggressive fighter focused on relentless attacks and shield-breaking maneuvers.'
     },
     haratu: {

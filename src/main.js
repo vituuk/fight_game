@@ -502,7 +502,7 @@ const particles = [];
  */
 const HERO_ABILITIES = {
   DEFAULT: { name: 'Fury Storm',   icon: '⚡', key: 'furyStorm',   cooldown: 3000 },
-  DD:      { name: 'Phantom Rush', icon: '👻', key: 'phantomRush', cooldown: 5000 },
+  'NARUTO UZUMAKI': { name: 'Phantom Rush', icon: '👻', key: 'phantomRush', cooldown: 5000 },
   HARATU:  { name: 'Thunder Clap', icon: '⚡', key: 'thunderClap', cooldown: 4000 },
   LUFFY:   { name: 'Gear Stretch', icon: '🥊', key: 'gearStretch',  cooldown: 5000 },
 };
@@ -755,7 +755,7 @@ function abilityFuryStorm() {
 }
 
 /**
- * ── ABILITY: Phantom Rush (DD) ──────────────────────────
+ * ── ABILITY: Phantom Rush (NARUTO UZUMAKI) ──────────────────────────
  * Teleport behind the nearest enemy, trigger a backstab burst.
  */
 function abilityPhantomRush() {
@@ -946,7 +946,7 @@ function useHeroAbility() {
   if (player.isDead || !gameActive) return;
   const key = player.heroKey || 'DEFAULT';
   switch (key) {
-    case 'DD':     abilityPhantomRush(); break;
+    case 'NARUTO UZUMAKI': abilityPhantomRush(); break;
     case 'HARATU': abilityThunderClap(); break;
     case 'LUFFY':  abilityGearStretch(); break;
     default:       abilityFuryStorm();  break;
