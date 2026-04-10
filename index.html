@@ -1,213 +1,226 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="description" content="2D Browser Fighting Game - Battle the AI with punches, kicks, and special moves!" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0d0d0d" />
-    <title>Fighting Game</title>
-    <link rel="stylesheet" href="/src/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="game-container">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="description" content="Fighter Game - Browser-Based 2D Fighting Game. Play Solo or Multiplayer Arena." />
+  <meta name="theme-color" content="#0d0d0d" />
+  <title>Fighter Game | Enter the Arena</title>
 
-      <!-- LAYER 1.5: Hero Selection -->
-      <div id="hero-selection" class="hero-selection">
-        <span class="hero-label">HERO:</span>
-        <div class="hero-options">
-          <img src="/assets/characters/p1.png" class="hero-btn active" data-src="/assets/characters/p1.png" data-name="DEFAULT" title="Default Fighter">
-          <img src="/assets/hero/dd-removebg-preview.png" class="hero-btn" data-src="/assets/hero/dd-removebg-preview.png" data-name="DD" title="DD">
-          <img src="/assets/hero/haratu.png" class="hero-btn" data-src="/assets/hero/haratu.png" data-name="HARATU" title="Haratu">
-          <img src="/assets/hero/lufy.png" class="hero-btn" data-src="/assets/hero/lufy.png" data-name="LUFFY" title="Luffy">
-        </div>
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="stylesheet" href="/src/landing.css" />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Background Animated Particles / Grid -->
+  <div id="bg-particles"></div>
+
+  <!-- Header Section -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="logo">
+        <a href="#hero">Fighter<span class="highlight">Game</span></a>
       </div>
-
-      <!-- LAYER 1.6: Sword Selection -->
-      <div id="sword-selection" class="sword-selection">
-        <span class="hero-label">SWORD:</span>
-        <div class="sword-options">
-          <img src="/assets/sword/sword1.png" class="sword-btn" data-src="/assets/sword/sword1.png" title="Light Blade">
-          <img src="/assets/sword/sword2.png" class="sword-btn active" data-src="/assets/sword/sword2.png" title="Heavy Blade">
-          <img src="/assets/sword/sword3.png" class="sword-btn" data-src="/assets/sword/sword3.png" title="Dragon Slayer">
-          <img src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" class="sword-btn" data-src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" title="Volt Blade">
-        </div>
-      </div>
-
-      <!-- LAYER 1: Canvas (bottom) -->
-      <canvas id="gameCanvas"></canvas>
-
-      <!-- LAYER 2: HUD - health bars & timer (above canvas, no pointer events) -->
-      <div id="ui-layer">
-        <div class="health-container p1-health">
-          <div class="player-name">Player 1</div>
-          <div class="health-bar-bg">
-            <div id="player1Health" class="health-bar-fill"></div>
-          </div>
-        </div>
-
-        <div id="timer">60</div>
-
-        <div class="health-container p2-health">
-          <div class="player-name">Enemy AI</div>
-          <div class="health-bar-bg flex-end">
-            <div id="player2Health" class="health-bar-fill"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- LAYER 3: Result overlay -->
-      <div id="displayText" style="display:none;">Tie</div>
-
-      <!-- LAYER 4: Stage transition cinematic -->
-      <div id="stage-overlay" class="stage-overlay hidden">
-        <div class="stage-curtain top"></div>
-        <div class="stage-curtain bottom"></div>
-        <div class="stage-info">
-          <div id="stage-number" class="stage-number">STAGE 1</div>
-          <div id="stage-vs" class="stage-vs">VS</div>
-          <div id="stage-enemy-name" class="stage-enemy-name">SAMURAI</div>
-        </div>
-      </div>
-
-      <!-- LAYER 5: Game Over / Victory screen -->
-      <div id="game-over-screen" class="game-over-screen hidden">
-        <div class="game-over-content">
-          <div id="game-over-title" class="game-over-title">GAME OVER</div>
-          <div id="game-over-sub" class="game-over-sub">You were defeated...</div>
-          <button id="btn-retry" class="retry-btn">▶ RETRY</button>
-        </div>
-      </div>
-
-      <!-- LAYER 5.5: Multiplayer Lobby -->
-      <div id="lobby-screen" class="game-over-screen">
-        <div class="game-over-content">
-          <div id="lobby-title" class="game-over-title">ONLINE ARENA</div>
-
-          <!-- Name entry panel (shown before connecting) -->
-          <div id="lobby-name-ui" style="width:100%; margin-bottom: 18px;">
-            <p style="font-size: 9px; color: #aaa; margin-bottom: 8px; letter-spacing: 1px;">YOUR FIGHTER NAME:</p>
-            <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
-              <input
-                type="text"
-                id="player-name-input"
-                maxlength="12"
-                placeholder="Enter name..."
-                style="
-                  flex:1; padding: 10px 12px;
-                  font-family: 'Press Start 2P', monospace; font-size: 9px;
-                  background: #1a1a2e; color: #fbc531;
-                  border: 2px solid #fbc531; border-radius: 4px;
-                  outline: none; text-align: center; letter-spacing: 2px;
-                  text-transform: uppercase;
-                "
-              >
-              <button id="btn-enter-arena" class="retry-btn" style="
-                margin: 0; padding: 10px 14px; font-size: 9px;
-                background: linear-gradient(135deg, #e1b12c, #f9ca24);
-                color: #1a1a2e; border: none; white-space: nowrap;
-              ">⚔️ ENTER</button>
-            </div>
-          </div>
-
-          <div id="lobby-sub" class="game-over-sub" style="margin-bottom: 20px; display:none;">Connecting to WebRTC...</div>
-          
-          <div id="lobby-host-ui" style="display: none; width: 100%;">
-            <p style="font-size: 10px; color: #aaa; margin-bottom: 8px;">Share this link to invite a friend:</p>
-            <input type="text" id="invite-link-input" readonly style="width: 100%; padding: 8px; font-family: monospace; font-size: 10px; background: #222; color: #fff; border: 1px solid #fbc531; border-radius: 4px; margin-bottom: 12px; text-align: center;">
-            <button id="btn-copy" class="retry-btn" style="background: #e1b12c;">📋 COPY LINK</button>
-          </div>
-          
-          <button id="btn-play-offline" class="retry-btn" style="margin-top: 20px; background: #666; width:auto; font-size:10px; display:none;">Play Singleplayer Offline</button>
-        </div>
-      </div>
-
-      <!-- Mute button -->
-      <button id="btn-mute" title="Toggle Sound">🔊</button>
-
-      <!-- LAYER 6: Touch Controls (absolute, inside game-container, overlays game) -->
-      <div id="controls-overlay">
-
-        <!-- LEFT: D-Pad with key labels -->
-        <div class="dpad-wrap">
-          <button id="btn-up" class="dpad-btn dpad-up">
-            <span class="dpad-arrow">↑</span>
-            <span class="btn-key">W</span>
-          </button>
-          <div class="dpad-row">
-            <button id="btn-left" class="dpad-btn dpad-left">
-              <span class="dpad-arrow">←</span>
-              <span class="btn-key">A</span>
-            </button>
-            <div class="dpad-center"></div>
-            <button id="btn-right" class="dpad-btn dpad-right">
-              <span class="dpad-arrow">→</span>
-              <span class="btn-key">D</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- RIGHT: Action buttons with icon + key label -->
-        <div class="action-wrap">
-          <div class="action-row">
-            <button id="btn-kick" class="action-btn btn-kick" title="Sword Strike (K)">
-              <span class="btn-icon">⚔️</span>
-              <span class="btn-label">Sword</span>
-              <span class="btn-key">K</span>
-            </button>
-            <button id="btn-shield" class="action-btn btn-shield" title="Shield (S)">
-              <span class="btn-icon">🛡️</span>
-              <span class="btn-label">Shield</span>
-              <span class="btn-key">S</span>
-            </button>
-          </div>
-          <div class="action-row">
-            <!-- Ability badge: sits above btn-special and shows current hero's active -->
-            <div id="ability-badge" class="ability-badge">
-              <span id="ability-badge-icon" class="ab-icon">⚡</span>
-              <span id="ability-badge-name" class="ab-name">Fury Storm</span>
-              <div class="ab-key">Q</div>
-            </div>
-            <button id="btn-special" class="action-btn btn-special" title="Hero Ability (Q)">
-              <span class="btn-icon">✨</span>
-              <span class="btn-label">Skill</span>
-              <span class="btn-key">Q</span>
-            </button>
-            <button id="btn-attack" class="action-btn btn-attack" title="Attack (Space)">
-              <span class="btn-icon">👊</span>
-              <span class="btn-label">Attack</span>
-              <span class="btn-key">SPC</span>
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-    </div><!-- end #game-container -->
-
-    <!-- Keyboard guide – desktop only, hidden on touch -->
-    <div id="keyboard-guide">
-      <span class="key-item">⬅️ <b>A</b> Left</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">➡️ <b>D</b> Right</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">⬆️ <b>W</b> Jump</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">👊 <b>Space</b> Attack</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">⚔️ <b>K</b> Sword</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">🛡️ <b>S</b> Shield</span>
-      <span class="key-sep">|</span>
-      <span class="key-item">✨ <b>Q</b> Skill</span>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#roster">Roster</a>
+        <a href="#weapons">Weapons</a>
+        <a href="#controls">Controls</a>
+        <a href="game.html" class="btn-play-nav">PLAY NOW</a>
+      </nav>
+      <button class="mobile-menu-btn" aria-label="Toggle Navigation">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
     </div>
+  </header>
 
-    <script type="module" src="/src/main.js"></script>
-  </body>
+  <!-- Mobile Dropdown -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#features" class="mobile-link">Features</a>
+    <a href="#roster" class="mobile-link">Roster</a>
+    <a href="#weapons" class="mobile-link">Weapons</a>
+    <a href="#controls" class="mobile-link">Controls</a>
+    <a href="game.html" class="btn-play-mobile">PLAY NOW</a>
+  </div>
+
+  <main>
+    <!-- Hero Section -->
+    <section id="hero" class="hero-section">
+      <div class="hero-content fade-in">
+        <h1 class="hero-title">STEP INTO THE ARENA.<br>MASTER THE <span class="highlight">BLADE.</span></h1>
+        <p class="hero-sub">Experience intense 2D browser-based combat. Singleplayer campaigns, WebRTC Multiplayer, and devastating combos.</p>
+        <div class="hero-actions">
+          <a href="game.html" class="btn-primary glow-effect">⚔️ PLAY NOW</a>
+          <a href="#features" class="btn-secondary">Learn More</a>
+        </div>
+      </div>
+      <div class="hero-graphic fade-in-up">
+        <!-- Mockup image or character overlay -->
+        <img src="/assets/hero/lufy.png" alt="Showcase character" class="hero-image floating">
+      </div>
+    </section>
+
+    <!-- Key Features Section -->
+    <section id="features" class="features-section section-padding">
+      <div class="container fade-in">
+        <h2 class="section-heading">GAME <span class="highlight">FEATURES</span></h2>
+        <div class="features-grid">
+          <!-- Feature Card 1 -->
+          <div class="feature-card glass-panel">
+            <div class="feature-icon">🌐</div>
+            <h3 class="feature-title">Offline & Online Arena</h3>
+            <p class="feature-desc">Seamlessly transition from fighting intelligent AI to challenging friends via smooth WebRTC Multiplayer combat.</p>
+          </div>
+          <!-- Feature Card 2 -->
+          <div class="feature-card glass-panel">
+            <div class="feature-icon">⚔️</div>
+            <h3 class="feature-title">Weapon Arsenal</h3>
+            <p class="feature-desc">Equip unique weapons like the Light Blade, Heavy Blade, Dragon Slayer, and Volt Blade before combat.</p>
+          </div>
+          <!-- Feature Card 3 -->
+          <div class="feature-card glass-panel">
+            <div class="feature-icon">✨</div>
+            <h3 class="feature-title">Devastating Skills</h3>
+            <p class="feature-desc">Unleash ultimate hero abilities like the "Fury Storm" and unique character spells to dominate the battlefield.</p>
+          </div>
+          <!-- Feature Card 4 -->
+          <div class="feature-card glass-panel">
+            <div class="feature-icon">📱</div>
+            <h3 class="feature-title">Cross-Platform</h3>
+            <p class="feature-desc">Full keyboard support for desktop and intuitive on-screen touch D-Pad and action buttons for mobile gamers.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Character Roster -->
+    <section id="roster" class="roster-section section-padding">
+      <div class="container fade-in">
+        <h2 class="section-heading">CHOOSE YOUR <span class="highlight">HERO</span></h2>
+        <div class="roster-showcase">
+          <!-- Character Nav -->
+          <div class="roster-list">
+            <button class="roster-btn active" data-hero="p1">DEFAULT FIGHTER</button>
+            <button class="roster-btn" data-hero="dd">DD</button>
+            <button class="roster-btn" data-hero="haratu">HARATU</button>
+            <button class="roster-btn" data-hero="luffy">LUFFY</button>
+          </div>
+          <!-- Character Display -->
+          <div class="roster-display">
+            <div class="roster-card glass-panel fade-in-fast" id="roster-card">
+              <img src="/assets/characters/p1.png" alt="Default Fighter" id="roster-img" class="roster-img">
+              <div class="roster-info">
+                <h3 id="roster-name" class="roster-name">Default Fighter</h3>
+                <p id="roster-desc" class="roster-desc">The standard combatant balanced for all play styles. Master the basics before venturing further.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Weapon Selection -->
+    <section id="weapons" class="weapons-section section-padding">
+      <div class="container fade-in">
+        <h2 class="section-heading">SELECT YOUR <span class="highlight">BLADE</span></h2>
+        <div class="weapons-grid">
+          <div class="weapon-card glass-panel">
+            <img src="/assets/sword/sword1.png" alt="Light Blade" class="weapon-img">
+            <h4 class="weapon-name">Light Blade</h4>
+          </div>
+          <div class="weapon-card glass-panel active">
+            <img src="/assets/sword/sword2.png" alt="Heavy Blade" class="weapon-img shadow-glow">
+            <h4 class="weapon-name">Heavy Blade</h4>
+          </div>
+          <div class="weapon-card glass-panel">
+            <img src="/assets/sword/sword3.png" alt="Dragon Slayer" class="weapon-img">
+            <h4 class="weapon-name">Dragon Slayer</h4>
+          </div>
+          <div class="weapon-card glass-panel">
+            <img src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" alt="Volt Blade" class="weapon-img">
+            <h4 class="weapon-name">Volt Blade</h4>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls Section -->
+    <section id="controls" class="controls-section section-padding">
+      <div class="container fade-in">
+        <h2 class="section-heading">HOW TO <span class="highlight">PLAY</span></h2>
+        
+        <div class="controls-container glass-panel">
+          
+          <div class="controls-platform">
+            <h3 class="platform-title">💻 DESKTOP (KEYBOARD)</h3>
+            <ul class="key-list">
+              <li><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> <span class="key-label">Movement / Jump</span></li>
+              <li><span class="key wide-key">SPACE</span> <span class="key-label">Basic Attack</span></li>
+              <li><span class="key">K</span> <span class="key-label">Sword Strike</span></li>
+              <li><span class="key">S</span> <span class="key-label">Shield / Block</span></li>
+              <li><span class="key">Q</span> <span class="key-label">Ultimate Skill</span></li>
+            </ul>
+          </div>
+          
+          <div class="controls-divider"></div>
+
+          <div class="controls-platform">
+            <h3 class="platform-title">📱 MOBILE (TOUCH)</h3>
+            <div class="mobile-mockup">
+              <div class="mockup-dpad">
+                <div class="dbtn top">↑</div>
+                <div class="dbtn left">←</div>
+                <div class="dbtn right">→</div>
+              </div>
+              <div class="mockup-actions">
+                <div class="abtn">⚔️</div>
+                <div class="abtn">🛡️</div>
+                <div class="abtn special">✨</div>
+                <div class="abtn attack">👊</div>
+              </div>
+            </div>
+            <p class="mobile-info">Intuitive on-screen D-Pad and Action buttons appear automatically on touch devices.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Pre-Footer CTA -->
+    <section class="cta-section section-padding">
+      <div class="container fade-in">
+        <h2 class="cta-title">THE ARENA AWAITS</h2>
+        <a href="game.html" class="btn-primary glow-effect massive-btn">ENTER MATCH</a>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <h3>Fighter<span class="highlight">Game</span></h3>
+        <p>An intense 2D browser battling experience.</p>
+      </div>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#roster">Roster</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      &copy; 2026 Fighter Game. All rights reserved.
+    </div>
+  </footer>
+
+  <script type="module" src="/src/landing.js"></script>
+</body>
 </html>
