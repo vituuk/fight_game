@@ -22,10 +22,12 @@
       <div id="hero-selection" class="hero-selection">
         <span class="hero-label">HERO:</span>
         <div class="hero-options">
-          <img src="/assets/characters/p1.png" class="hero-btn active" data-src="/assets/characters/p1.png" data-name="DEFAULT" title="Default Fighter">
-          <img src="/assets/hero/naruto_uzumaki.png" class="hero-btn" data-src="/assets/hero/naruto_uzumaki.png" data-name="NARUTO UZUMAKI" title="Naruto Uzumaki">
-          <img src="/assets/hero/haratu.png" class="hero-btn" data-src="/assets/hero/haratu.png" data-name="HARATU" title="Haratu">
-          <img src="/assets/hero/lufy.png" class="hero-btn" data-src="/assets/hero/lufy.png" data-name="LUFFY" title="Luffy">
+
+          <!-- Video heroes: using specific thumbnails (hero1.png ~ hero4.png) -->
+          <img src="/assets/hero/hero1.png" class="hero-btn" data-src="/assets/hero/hero1.mp4" data-name="SHADOW WARRIOR 1" data-video="true" title="Shadow Warrior 1 (Video)">
+          <img src="/assets/hero/hero2.png" class="hero-btn" data-src="/assets/hero/hero2.mp4" data-name="SHADOW WARRIOR 2" data-video="true" title="Shadow Warrior 2 (Video)">
+          <img src="/assets/hero/hero3.png" class="hero-btn" data-src="/assets/hero/hero3.mp4" data-name="SHADOW WARRIOR 3" data-video="true" title="Shadow Warrior 3 (Video)">
+          <img src="/assets/hero/hero4.png" class="hero-btn" data-src="/assets/hero/hero4.mp4" data-name="SHADOW WARRIOR 4" data-video="true" title="Shadow Warrior 4 (Video)">
         </div>
       </div>
 
@@ -37,6 +39,14 @@
           <img src="/assets/sword/sword2.png" class="sword-btn active" data-src="/assets/sword/sword2.png" title="Heavy Blade">
           <img src="/assets/sword/sword3.png" class="sword-btn" data-src="/assets/sword/sword3.png" title="Dragon Slayer">
           <img src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" class="sword-btn" data-src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" title="Volt Blade">
+        </div>
+      </div>
+
+      <!-- LAYER 1.7: Stage Selection (compact bar) - hidden during gameplay -->
+      <div id="stage-selection" class="stage-selection" style="display:none;">
+        <span class="hero-label">STAGE:</span>
+        <div class="stage-options" id="stage-options-bar">
+          <!-- Populated by JS -->
         </div>
       </div>
 
@@ -82,6 +92,16 @@
           <div id="game-over-title" class="game-over-title">GAME OVER</div>
           <div id="game-over-sub" class="game-over-sub">You were defeated...</div>
           <button id="btn-retry" class="retry-btn">▶ RETRY</button>
+          <button id="btn-stage-select" class="retry-btn" style="margin-top:2px; background: linear-gradient(135deg,#1e90ff,#0d5cbe); color:#fff; box-shadow: 0 0 24px rgba(30,144,255,0.5), 4px 4px 0 #072a6e;">🗺️ SELECT STAGE</button>
+        </div>
+      </div>
+
+      <!-- LAYER 5.2: Stage Select Overlay (shown between rounds) -->
+      <div id="stage-select-overlay" class="hidden">
+        <div class="sso-title">⚔️ SELECT STAGE</div>
+        <div class="sso-sub">CHOOSE YOUR BATTLEFIELD</div>
+        <div class="sso-grid" id="sso-grid">
+          <!-- Populated by JS -->
         </div>
       </div>
 

@@ -20,15 +20,16 @@ export function determineWinner({ player, enemy, timerId, game, onPlayerWin, onP
   clearTimeout(timerId);
   game.displayText.style.display = 'flex';
 
-  if (player.health === enemy.health) {
-    game.displayText.innerHTML = 'YOU LOST! 💀'; // Changed from 'Tie!'
-    setTimeout(() => { if (onPlayerLose) onPlayerLose(); }, 2500);
-  } else if (player.health > enemy.health) {
+  // Compare as % of respective max so bonus HP doesn't always win
+  const playerPct = player.health / (player._maxHealth || 100);
+  const enemyPct  = enemy.health  / 100;
+
+  if (playerPct > enemyPct) {
     game.displayText.innerHTML = 'Player Wins! 🏆';
     setTimeout(() => { if (onPlayerWin) onPlayerWin(); }, 2000);
   } else {
-    game.displayText.innerHTML = 'YOU LOST! 💀'; // Changed from 'Enemy AI Wins!'
+    // Tie or enemy ahead = player loses
+    game.displayText.innerHTML = 'YOU LOST! 💀';
     setTimeout(() => { if (onPlayerLose) onPlayerLose(); }, 2500);
   }
 }
-

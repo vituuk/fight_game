@@ -132,6 +132,12 @@ export class Player {
     this.velocity = { x: 0, y: 0 };
     this.clamping = true;
     
+    // Clear video hero offscreen canvases if present
+    this._videoCanvas     = null;
+    this._videoCtx        = null;
+    this._videoCropCanvas = null;
+    this._videoCropCtx    = null;
+
     // Clear cooldowns
     this._lastSpecialTime = 0;
     this._lastShieldTime  = 0;
@@ -264,6 +270,7 @@ export class Player {
     } else {
       this.attackBox.position.x = this.position.x - this.attackBox.width;
     }
+    // ✅ FIX: update attackBox Y every frame (was frozen at construction offset)
     this.attackBox.position.y = this.position.y + this.attackBox.offset.y;
 
     if (!this._isCombatState()) {
@@ -302,9 +309,7 @@ export class Player {
       this.position.y = floorY - this.height;
     } else {
       this.velocity.y += this.game.gravity;
-      // Stretches while falling/jumping
-      if (this.velocity.y < -5) this._squash(0.85, 1.15); // Upward stretch
-      else if (this.velocity.y > 10) this._squash(0.95, 1.05); // Downward fast
+      // No in-air stretch — character keeps normal proportions while jumping
     }
 
     if (this.clamping) {
@@ -365,59 +370,181 @@ export class Player {
     const dh = this.height * 1.32;
     const dhBot = dh * 0.45;
 
-    if (this.img.complete && this.img.naturalWidth > 0) {
-      const nw = this.img.naturalWidth;
-      const nh = this.img.naturalHeight;
-      const cutY = nh * 0.55; // Waist line in raw image
-      const dhTop = dh * 0.55;
+    // Accept HTMLImageElement, HTMLCanvasElement, or HTMLVideoElement
+    const imgReady = this.img && (
+      (this.img.complete && this.img.naturalWidth > 0) ||          // <img>
+      (this.img.width > 0 && this.img.height > 0 &&
+       this.img.tagName !== 'VIDEO') ||                            // <canvas>
+      (this.img.tagName === 'VIDEO' &&
+       this.img.readyState >= 2 && this.img.videoWidth > 0)       // <video>
+    );
+    if (imgReady) {
+      // ── For video heroes: detect bg color from corners, strip it, crop to char ──
+      let drawSrc = this.img;
+      if (this.img.tagName === 'VIDEO') {
+        const VW = this.img.videoWidth;
+        const VH = this.img.videoHeight;
+        const scale = Math.min(320 / VW, 1);
+        const SW    = Math.round(VW * scale);
+        const SH    = Math.round(VH * scale);
 
-      // Bottom Half (Hips & Legs) 
-      const isSplitRun = (this._state === 'run');
+        if (!this._videoCanvas) {
+          this._videoCanvas = document.createElement('canvas');
+          this._videoCanvas.width  = SW;
+          this._videoCanvas.height = SH;
+          this._videoCtx = this._videoCanvas.getContext('2d', { willReadFrequently: true });
+        } else if (this._videoCanvas.width !== SW) {
+          this._videoCanvas.width  = SW;
+          this._videoCanvas.height = SH;
+        }
 
-      if (isSplitRun) {
-        // SEGMENTED RENDERING — Only for run (stomach stays still)
-        const hipPct = 0.35; 
-        const dhHip = dhBot * hipPct;
-        const dhLeg = dhBot * (1 - hipPct);
-        const nwHip = nw;      const nhHip = (nh - cutY) * hipPct;
-        const nwLeg = nw;      const nhLeg = (nh - cutY) * (1 - hipPct);
-        const syHip = cutY;    const syLeg = cutY + nhHip;
+        this._videoCtx.clearRect(0, 0, SW, SH);
+        this._videoCtx.drawImage(this.img, 0, 0, SW, SH);
+        const id = this._videoCtx.getImageData(0, 0, SW, SH);
+        const d  = id.data;
 
-        // 1. Hips (Static with torso)
-        ctx.save();
-        ctx.translate(0, -dhBot);
-        ctx.rotate(anim.topRot); // Hips follow torso tilted stance
-        ctx.drawImage(this.img, 0, syHip, nwHip, nhHip, -dw / 2, 0, dw, dhHip + 2); // +2 overlap
-        ctx.restore();
+        // ── Step 1: Detect bg color — sample 4 corners, pick most likely BG ────
+        const samplePatch = (cx, cy) => {
+          let sr=0, sg=0, sb=0, cnt=0;
+          const R = 4;
+          for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++) {
+            const px = Math.min(SW-1, Math.max(0, cx+dx));
+            const py = Math.min(SH-1, Math.max(0, cy+dy));
+            const ii = (py*SW+px)*4;
+            sr+=d[ii]; sg+=d[ii+1]; sb+=d[ii+2]; cnt++;
+          }
+          const ar=sr/cnt, ag=sg/cnt, ab=sb/cnt;
+          let variance = 0;
+          for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++) {
+            const px = Math.min(SW-1, Math.max(0, cx+dx));
+            const py = Math.min(SH-1, Math.max(0, cy+dy));
+            const ii = (py*SW+px)*4;
+            variance += Math.abs(d[ii]-ar)+Math.abs(d[ii+1]-ag)+Math.abs(d[ii+2]-ab);
+          }
+          // Score combined: low variance is GOOD, very bright is usually BG
+          const brightness = (ar + ag + ab) / 3;
+          const score = variance - (brightness * 0.5); 
+          return { r:ar, g:ag, b:ab, score };
+        };
+        const patches = [
+          samplePatch(0, 0), samplePatch(SW-1, 0),
+          samplePatch(0, SH-1), samplePatch(SW-1, SH-1)
+        ];
+        const best = patches.reduce((a, b) => b.score < a.score ? b : a);
+        const bgR = best.r, bgG = best.g, bgB = best.b;
 
-        // 2. Legs (Rotation from hip-line)
-        ctx.save();
-        ctx.translate(0, -dhBot + dhHip); // Pivot at the hip-line
-        ctx.rotate(anim.bottomRot);
-        ctx.scale(1, anim.bottomScaleY);
-        ctx.drawImage(this.img, 0, syLeg, nwLeg, nhLeg, -dw / 2, -1, dw, dhLeg + 1); // -1 overlap
-        ctx.restore();
-      } else {
-        // SOLID RENDERING — For combat/skills (ensures cohesion)
-        ctx.save();
-        ctx.translate(0, -dhBot); // Pivot at the waist
-        ctx.rotate(anim.bottomRot);
-        ctx.scale(1, anim.bottomScaleY);
-        ctx.drawImage(this.img, 0, cutY, nw, nh - cutY, -dw / 2, 0, dw, dhBot);
-        ctx.restore();
+        // ── Step 2: Global color match + bounding box ───────────────
+        const thr = 80;
+        let minX = SW, maxX = 0, minY = SH, maxY = 0;
+        for (let py = 0; py < SH; py++) {
+          for (let px = 0; px < SW; px++) {
+            const ii = (py * SW + px) * 4;
+            const dist = Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB));
+            if (dist < thr) {
+              d[ii+3] = dist < thr*0.35 ? 0 : Math.round(d[ii+3]*((dist-thr*0.35)/(thr*0.65)));
+            } else if (d[ii+3] > 10) {
+              if (px < minX) minX = px; if (px > maxX) maxX = px;
+              if (py < minY) minY = py; if (py > maxY) maxY = py;
+            }
+          }
+        }
+        this._videoCtx.putImageData(id, 0, 0);
+
+
+
+        // ── Step 3: Crop to character bounding box ───────────────────────────
+        if (maxX > minX && maxY > minY) {
+          const pad = 8;
+          const cx = Math.max(0, minX - pad);
+          const cy = Math.max(0, minY - pad);
+          const cw = Math.min(SW, maxX + pad + 1) - cx;
+          const ch = Math.min(SH, maxY + pad + 1) - cy;
+
+          if (!this._videoCropCanvas) {
+            this._videoCropCanvas = document.createElement('canvas');
+            this._videoCropCtx    = this._videoCropCanvas.getContext('2d');
+          }
+          this._videoCropCanvas.width  = cw;
+          this._videoCropCanvas.height = ch;
+          this._videoCropCtx.clearRect(0, 0, cw, ch);
+          this._videoCropCtx.drawImage(this._videoCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+          drawSrc = this._videoCropCanvas;
+        } else {
+          drawSrc = this._videoCanvas;
+        }
       }
 
-      // Top Half (Torso, Head, Arms)
-      ctx.save();
-      ctx.translate(0, -dhBot); // Pivot at the waist
-      ctx.rotate(anim.topRot);
-      // Added +5 on the destination height to slightly overlap the waist gap
-      ctx.drawImage(this.img, 0, 0, nw, cutY, -dw / 2, -dhTop, dw, dhTop + 5);
-      ctx.restore();
+      const nw = drawSrc.naturalWidth  || drawSrc.videoWidth  || drawSrc.width;
+      const nh = drawSrc.naturalHeight || drawSrc.videoHeight || drawSrc.height;
+      const isVideoSrc = (this.img && this.img.tagName === 'VIDEO');
+
+      if (isVideoSrc && this._videoCanvas) {
+        // ── VIDEO HERO: Proportional Scaling ──
+        // We calculate a fixed scale based on the raw video canvas height.
+        // This ensures the character doesn't stretch or squash when their 
+        // bounding box changes shape (e.g. swinging a sword wide).
+        const frameScale = 300 / this._videoCanvas.height; 
+        
+        const vdw = nw * frameScale;
+        const vdh = nh * frameScale;
+        
+        ctx.save();
+        ctx.rotate(anim.topRot);  // body tilt animation still applies
+        // Draw from y=0 (feet/ground) up to y=-vdh (top of crop)
+        ctx.drawImage(drawSrc, 0, 0, nw, nh, -vdw / 2, -vdh, vdw, vdh);
+        ctx.restore();
+      } else {
+        // ── IMAGE HERO: segmented puppet rendering (existing system) ──────────
+        const cutY  = nh * 0.55; // Waist line in raw image
+        const dhTop = dh * 0.55;
+
+        const isSplitRun = (this._state === 'run');
+
+        if (isSplitRun) {
+          // SEGMENTED RENDERING — Only for run (stomach stays still)
+          const hipPct = 0.35;
+          const dhHip = dhBot * hipPct;
+          const dhLeg = dhBot * (1 - hipPct);
+          const nwHip = nw;      const nhHip = (nh - cutY) * hipPct;
+          const nwLeg = nw;      const nhLeg = (nh - cutY) * (1 - hipPct);
+          const syHip = cutY;    const syLeg = cutY + nhHip;
+
+          // 1. Hips (Static with torso)
+          ctx.save();
+          ctx.translate(0, -dhBot);
+          ctx.rotate(anim.topRot);
+          ctx.drawImage(drawSrc, 0, syHip, nwHip, nhHip, -dw / 2, 0, dw, dhHip + 2);
+          ctx.restore();
+
+          // 2. Legs (Rotation from hip-line)
+          ctx.save();
+          ctx.translate(0, -dhBot + dhHip);
+          ctx.rotate(anim.bottomRot);
+          ctx.scale(1, anim.bottomScaleY);
+          ctx.drawImage(drawSrc, 0, syLeg, nwLeg, nhLeg, -dw / 2, -1, dw, dhLeg + 1);
+          ctx.restore();
+        } else {
+          // SOLID RENDERING — For combat/skills
+          ctx.save();
+          ctx.translate(0, -dhBot);
+          ctx.rotate(anim.bottomRot);
+          ctx.scale(1, anim.bottomScaleY);
+          ctx.drawImage(drawSrc, 0, cutY, nw, nh - cutY, -dw / 2, 0, dw, dhBot);
+          ctx.restore();
+        }
+
+        // Top Half (Torso, Head, Arms)
+        ctx.save();
+        ctx.translate(0, -dhBot);
+        ctx.rotate(anim.topRot);
+        ctx.drawImage(drawSrc, 0, 0, nw, cutY, -dw / 2, -dhTop, dw, dhTop + 5);
+        ctx.restore();
+      }
     } else {
       ctx.fillStyle = '#888';
       ctx.fillRect(-this.width/2, -this.height, this.width, this.height);
     }
+
 
     // Weapon / item overlay (matches Top Half rotation)
     ctx.save();
@@ -451,6 +578,8 @@ export class Player {
    *    ACTIVE position → item animating during the matching attack
    ──────────────────────────────────────────────────────────── */
   _drawEquipped(ctx, f, t) {
+    if (this.isEnemy) return; // Enemies already have weapons drawn into their sprites
+    
     const eq    = this.equippedSkill;
     const state = this._state;
 
@@ -462,7 +591,7 @@ export class Player {
       case 'sword': {
         if (!this.imgSword.complete || !this.imgSword.naturalWidth) break;
 
-        const SW = 175;
+        const SW = 100; // Even smaller for better proportions
         const SH = SW * (this.imgSword.naturalHeight / this.imgSword.naturalWidth);
 
         let tx = 28, ty = -this.height * 0.62;
@@ -510,16 +639,30 @@ export class Player {
           ctx.shadowColor = '#a0d8ff';
           ctx.shadowBlur  = 22;
         }
+
+        let pivotX = SW * 0.12;
+        let pivotY = SH * 0.88;
+        let addedAngle = 0;
+
+        // Customise handle pivot based on the sword image since they are drawn differently
+        if (this.imgSword.src && this.imgSword.src.includes('sword3')) {
+          // The huge blue sword image has the handle at the TOP
+          pivotX = SW * 0.5;
+          pivotY = SH * 0.08; 
+          addedAngle = Math.PI; // Flip it so tip points UP
+        }
+
+
         ctx.translate(tx, ty);
-        ctx.rotate(angle);
-        ctx.drawImage(this.imgSword, -SW * 0.12, -SH * 0.88, SW, SH);
+        ctx.rotate(angle + addedAngle);
+        ctx.drawImage(this.imgSword, -pivotX, -pivotY, SW, SH);
         ctx.restore();
         break;
       }
 
       /* ── REIMAGINED METALLIC FIRE SHIELD ──────────────────────────────────── */
       case 'shield': {
-        const SZ = 170; // Massively increased overall shield size
+        const SZ = 70; // Much smaller shield size
         let tx = 34, ty = -this.height * 0.50, angle = -0.18;
         const tNow = Date.now() / 150;
 
@@ -626,12 +769,31 @@ export class Player {
     const cx = this.position.x + this.width  / 2;
     const cy = this.position.y + this.height / 2;
 
+    // --- Floating Health Bar for all enemies ---
+    if (this.isEnemy && !this.isDead && !this.isHidden) {
+      const bw = 60;
+      const bh = 6;
+      const bx = cx - bw / 2;
+      const by = this.position.y - 20;
+      const hpPct = Math.max(0, this.health || 0) / 100;
+      
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+      ctx.fillStyle = '#b71c1c';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = '#4caf50';
+      ctx.fillRect(bx, by, bw * hpPct, bh);
+      ctx.restore();
+    }
+
     // Shield bubble — gradient cached by position bucket (16px grid)
     if (this.isShielding || (this.equippedSkill === 'shield' && this._state === 'shield')) {
       const bucket = Math.round(cx / 16);
       if (bucket !== this._shieldGrdBucket) {
         this._shieldGrdBucket = bucket;
-        const r = 76;
+        const r = 45;
         this._shieldGrd = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
         this._shieldGrd.addColorStop(0, 'rgba(255,200,0,0.85)'); // fiery gold inner
         this._shieldGrd.addColorStop(1, 'rgba(255,50,0,0.0)');   // red outer
@@ -640,7 +802,7 @@ export class Player {
       ctx.globalAlpha = 0.40 + Math.sin(this._t * 4) * 0.08;
       ctx.fillStyle   = this._shieldGrd;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, 76, 76 * 1.1, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, 45, 45 * 1.1, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,150,0,0.65)'; // fiery border
       ctx.lineWidth   = 2;
@@ -981,3 +1143,4 @@ export class Player {
 
   animate() {}  // Sprite API stub
 }
+

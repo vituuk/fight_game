@@ -1000,68 +1000,238 @@ function drawGearStretch() {
   ctx.restore();
 }
 
-// ─── Stage definitions ────────────────────────────────────────────────────────
-const STAGES = [
-  {
-    id: 1,
-    location:    'The Dojo',
-    bgSrc:       '/assets/background/b.jpg',
-    enemySrc:    '/assets/characters/anamy.png',
-    enemyName:   'SAMURAI',
-    accentColor: '#ef5350',
-  },
-  {
-    id: 2,
-    location:    'Hero Arena',
-    bgSrc:       '/assets/background/b2.jpeg',
-    enemySrc:    '/assets/characters/anamy1.png',
-    enemyName:   'DEKU',
-    accentColor: '#4caf50',
-  },
-  {
-    id: 3,
-    location:    'City Streets',
-    bgSrc:       '/assets/background/background.jpg',
-    enemySrc:    '/assets/characters/anamy2.png',
-    enemyName:   'SHADOW',
-    accentColor: '#78909c',
-  },
-  {
-    id: 4,
-    location:    'Volcano Peak',
-    bgSrc:       '/assets/background/background1.jpg',
-    enemySrc:    '/assets/characters/anamy3.png',
-    enemyName:   'RYU',
-    accentColor: '#ff5722',
-  },
-  {
-    id: 5,
-    location:    'Enchanted Forest',
-    bgSrc:       '/assets/background/forest.png',
-    enemySrc:    '/assets/characters/anamy.png',
-    enemyName:   'DARK SAMURAI',
-    accentColor: '#7c4dff',
-  },
-  {
-    id: 6,
-    location:    'Final Arena',
-    bgSrc:       '/assets/background/bg-00.png',
-    enemySrc:    '/assets/characters/anamy3.png',
-    enemyName:   'FINAL BOSS',
-    accentColor: '#ffd600',
-  },
+// ─── Background definitions (decoupled from enemies) ─────────────────────────
+const BACKGROUNDS = [
+  { id: 1, location: 'The Dojo',          bgSrc: '/assets/background/b.jpg'         },
+  { id: 2, location: 'Hero Arena',         bgSrc: '/assets/background/b2.jpeg'        },
+  { id: 3, location: 'City Streets',       bgSrc: '/assets/background/background.jpg' },
+  { id: 4, location: 'Volcano Peak',       bgSrc: '/assets/background/background1.jpg'},
+  { id: 5, location: 'Enchanted Forest',   bgSrc: '/assets/background/forest.png'     },
+  { id: 6, location: 'Final Arena',        bgSrc: '/assets/background/bg-00.png'      },
 ];
 
+// ─── Enemy roster (all enemies can appear on any stage) ──────────────────────
+const ENEMY_ROSTER = [
+  { name: 'SAMURAI',     src: '/assets/characters/anamy.png',  accentColor: '#ef5350' },
+  { name: 'DEKU',        src: '/assets/characters/anamy1.png', accentColor: '#4caf50' },
+  { name: 'SHADOW',      src: '/assets/characters/anamy2.png', accentColor: '#78909c' },
+  { name: 'RYU',         src: '/assets/characters/anamy3.png', accentColor: '#ff5722' },
+  { name: 'WARRIOR',     src: '/assets/characters/warrior.png',accentColor: '#7c4dff' },
+];
+
+// ─── Compatibility shim: keep STAGES alias for parts of code that still use it
+// Points at BACKGROUNDS since we no longer have a fixed stage-enemy binding.
+const STAGES = BACKGROUNDS;
+
 let currentStageIdx = 0;
+let unlockedStageIdx = 0;
+let currentWaveIdx  = 0;
 let gameActive      = true;  // false while transitioning
 
 // Pre-load all background images so transitions are instant
 const bgImages = {};
-STAGES.forEach(s => {
+BACKGROUNDS.forEach(s => {
   const img = new Image();
   img.src = s.bgSrc;
   bgImages[s.bgSrc] = img;
 });
+
+// ─── Stage Select UI (full-screen overlay + compact bar) ─────────────────────
+const _ssoEl    = document.getElementById('stage-select-overlay');
+const _ssoGrid  = document.getElementById('sso-grid');
+const _stageBar = document.getElementById('stage-options-bar');
+
+/** Build both the full-screen grid and the compact top bar once */
+function buildStageSelectUI() {
+  if (!_ssoGrid || !_stageBar) return;
+  _ssoGrid.innerHTML = '';
+  _stageBar.innerHTML = '';
+
+  BACKGROUNDS.forEach((bg, idx) => {
+    // ── Full-screen grid card ──────────────────────────────────────────────
+    const card = document.createElement('div');
+    card.className = 'sso-card';
+    card.innerHTML = `<img src="${bg.bgSrc}" alt="${bg.location}"><div class="sso-label">${bg.location.toUpperCase()}</div>`;
+    card.addEventListener('click', () => selectStage(idx));
+    _ssoGrid.appendChild(card);
+
+    // ── Compact bar thumbnail ──────────────────────────────────────────────
+    const btn = document.createElement('div');
+    btn.className = 'stage-btn';
+    btn.dataset.idx = idx;
+    btn.innerHTML = `<img src="${bg.bgSrc}" alt="${bg.location}"><span class="stage-num">${idx + 1}</span>`;
+    btn.title = bg.location;
+    btn.addEventListener('click', () => selectStage(idx));
+    _stageBar.appendChild(btn);
+  });
+  updateStageBarHighlight();
+}
+
+/** Update the active highlight in the compact top bar */
+function updateStageBarHighlight() {
+  if (_stageBar) {
+    _stageBar.querySelectorAll('.stage-btn').forEach(b => {
+      const idx = parseInt(b.dataset.idx);
+      const isLocked = idx > unlockedStageIdx;
+      b.classList.toggle('active', idx === currentStageIdx);
+      b.classList.toggle('locked', isLocked);
+      b.style.opacity = isLocked ? '0.4' : '1';
+      b.style.pointerEvents = isLocked ? 'none' : 'auto';
+      b.querySelector('.stage-num').innerHTML = `${idx + 1} ${isLocked ? '🔒' : ''}`;
+      b.title = isLocked ? 'Locked' : BACKGROUNDS[idx].location;
+    });
+  }
+  if (_ssoGrid) {
+    _ssoGrid.querySelectorAll('.sso-card').forEach((card, idx) => {
+      const isLocked = idx > unlockedStageIdx;
+      card.classList.toggle('locked', isLocked);
+      card.style.opacity = isLocked ? '0.4' : '1';
+      card.style.pointerEvents = isLocked ? 'none' : 'auto';
+      card.querySelector('.sso-label').innerHTML = `${BACKGROUNDS[idx].location.toUpperCase()} ${isLocked ? '🔒' : ''}`;
+    });
+  }
+}
+
+/** Show the full-screen stage selection overlay */
+function showStageSelect() {
+  gameActive = false;
+  clearTimeout(timerId);
+  if (!_ssoEl) return;
+  updateStageBarHighlight();
+  _ssoEl.classList.remove('hidden');
+  requestAnimationFrame(() => _ssoEl.classList.add('visible'));
+}
+
+/** Hide the full-screen stage selection overlay */
+function hideStageSelect() {
+  if (!_ssoEl) return;
+  _ssoEl.classList.remove('visible');
+  setTimeout(() => _ssoEl.classList.add('hidden'), 420);
+}
+
+/** Called when the player clicks a stage card */
+function selectStage(idx) {
+  if (idx > unlockedStageIdx) return; // Prevent selection of locked stages
+  currentStageIdx = idx;
+  updateStageBarHighlight();
+  hideStageSelect();
+  // Hide game-over screen if visible
+  gameOverScreen.classList.remove('visible');
+  setTimeout(() => gameOverScreen.classList.add('hidden'), 520);
+  // Start the round with the new background
+  resetRound();
+}
+
+// Helper: pick a random entry from an array
+function randomEntry(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Helper: pick `n` distinct random entries from an array (wraps if n > arr.length)
+function randomDistinct(arr, n) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  const result = [];
+  for (let i = 0; i < n; i++) result.push(shuffled[i % shuffled.length]);
+  return result;
+}
+
+// ─── Background-removal utility for enemy sprites ───────────────────────────
+/**
+ * removeWhiteBg: draws `img` onto an offscreen canvas and makes any
+ * near-white pixel transparent. Returns the canvas so it can be drawn
+ * in place of the original image (canvas is drawable by ctx.drawImage).
+ *
+ * threshold: how far from pure-white (255,255,255) a pixel may be
+ * and still be erased.  30 handles off-white JPEG artefacts well.
+ */
+function removeWhiteBg(img, threshold = 70) {
+  const oc  = document.createElement('canvas');
+  const W = img.naturalWidth  || img.width;
+  const H = img.naturalHeight || img.height;
+  oc.width  = W;
+  oc.height = H;
+  const ctx = oc.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+
+  if (!W || !H) return oc;
+  const id = ctx.getImageData(0, 0, W, H);
+  const d  = id.data;
+
+  // ── 1. Helper to sample a 5x5 patch ──────────────────────────────────────
+  const samplePatch = (cx, cy) => {
+    let r=0, g=0, b=0, a=0, cnt=0;
+    for(let dy=-2; dy<=2; dy++) {
+      for(let dx=-2; dx<=2; dx++) {
+        const x = Math.min(W-1, Math.max(0, cx+dx));
+        const y = Math.min(H-1, Math.max(0, cy+dy));
+        const i = (y*W+x)*4;
+        r+=d[i]; g+=d[i+1]; b+=d[i+2]; a+=d[i+3]; cnt++;
+      }
+    }
+    return { r:r/cnt, g:g/cnt, b:b/cnt, a:a/cnt };
+  };
+
+  const corners = [
+    samplePatch(0, 0), samplePatch(W-1, 0),
+    samplePatch(0, H-1), samplePatch(W-1, H-1)
+  ];
+
+  // If ALL corners are mostly transparent → skip
+  if (Math.max(...corners.map(c=>c.a)) < 50) return oc;
+
+  // Use the most opaque corner as bg reference
+  const bg = corners.reduce((best, c) => c.a > best.a ? c : best);
+  const bgR = bg.r, bgG = bg.g, bgB = bg.b;
+
+  // ── 2. BFS flood-fill from all 4 edges ───────────────────────────────────
+  const isBg = (x, y) => {
+    const i = (y*W+x)*4;
+    if (d[i+3] < 50) return true;
+    return Math.max(Math.abs(d[i]-bgR), Math.abs(d[i+1]-bgG), Math.abs(d[i+2]-bgB)) < threshold;
+  };
+
+  const visited = new Uint8Array(W * H);
+  const queue = [];
+  for (let x=0; x<W; x++) {
+    if (isBg(x, 0))    { visited[x] = 1; queue.push(x, 0); }
+    if (isBg(x, H-1))  { visited[(H-1)*W+x] = 1; queue.push(x, H-1); }
+  }
+  for (let y=1; y<H-1; y++) {
+    if (isBg(0, y))    { visited[y*W] = 1; queue.push(0, y); }
+    if (isBg(W-1, y))  { visited[y*W+W-1] = 1; queue.push(W-1, y); }
+  }
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const qx = queue[qi++], qy = queue[qi++];
+    const i = (qy*W+qx)*4;
+    const dist = Math.max(Math.abs(d[i]-bgR),Math.abs(d[i+1]-bgG),Math.abs(d[i+2]-bgB));
+    d[i+3] = dist < threshold*0.4 ? 0 : Math.round(d[i+3] * (dist - threshold*0.4) / (threshold*0.6));
+
+    for (const [nx, ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]) {
+      if (nx<0||nx>=W||ny<0||ny>=H) continue;
+      const ni = ny*W+nx;
+      if (!visited[ni] && isBg(nx, ny)) {
+        visited[ni] = 1;
+        queue.push(nx, ny);
+      }
+    }
+  }
+
+  ctx.putImageData(id, 0, 0);
+  return oc;
+}
+
+/** Load a sprite and return a Promise that resolves to a bg-stripped canvas */
+function loadEnemyImg(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(removeWhiteBg(img));
+    img.onerror = () => { resolve(img); }; // fallback: raw image
+    img.src = src;
+  });
+}
 
 // ─── Background drawing (image-based) ────────────────────────────────────────
 function drawBackground() {
@@ -1152,9 +1322,9 @@ enemy.height = CHAR_H;
 enemy.attackBox.width  = ATTACK_W;
 enemy.attackBox.height = ATTACK_H;
 
-// ─ Extra Enemy Pool (up to 3 extra, activated from round 2) ───────────────────────
-const EXTRA_ENEMY_SPAWN_X = [540, 340, 640]; // Flanking positions
-const EXTRA_ENEMY_COLORS  = ['#ff7043','#ab47bc','#26c6da'];
+// ─ Extra Enemy Pool (up to 7 extra) ───────────────────────
+const EXTRA_ENEMY_SPAWN_X = [540, 340, 640, 240, 740, 140, 440]; // Flanking positions
+const EXTRA_ENEMY_COLORS  = ['#ff7043','#ab47bc','#26c6da', '#ffeb3b', '#66bb6a', '#ec407a', '#8d6e63'];
 
 const enemyPool = EXTRA_ENEMY_SPAWN_X.map((spawnX, i) => {
   const e = new Player(game, {
@@ -1182,57 +1352,152 @@ const enemyPool = EXTRA_ENEMY_SPAWN_X.map((spawnX, i) => {
 // Tracks how many extra enemies are active this round (0 = only main enemy)
 let activeExtraCount = 0;
 
-// Generic AI factory — returns an independent state machine tick function
-// Uses raw strings (not AI.XXX) so it can be created before the AI object is defined
-function createAI(target) {
-  let state = 'approach';  // = AI.APPROACH
-  let timer = 0;
-  let cd    = 0;
+// ─── Pool Enemy AI — Real Fighting Logic ─────────────────────────────────────
+// Each pool enemy runs independently but respects a shared "turn" system:
+// only MAX_ATTACKERS enemies may attack simultaneously. Others circle and wait.
+const MAX_ATTACKERS = 2; // max enemies attacking at same time
+let _attackerCount  = 0; // shared counter across all pool AIs
+
+function createAI(target, idx = 0) {
+  let state       = 'footsie';  // start in neutral spacing state
+  let timer       = 0;
+  let cd          = 0;
+  let myTurn      = false;        // whether this enemy holds an "attack turn" slot
+  let evadeTimer  = 0;            // frames left evading player's attack
+  let waitTimer   = Math.round(Math.random() * 20); // was 40 — shorter startup stagger
+
+  const release = () => { if (myTurn) { _attackerCount = Math.max(0, _attackerCount - 1); myTurn = false; } };
+  const claim   = () => { if (!myTurn && _attackerCount < MAX_ATTACKERS) { _attackerCount++; myTurn = true; return true; } return myTurn; };
+
   return function tick() {
-    if (target.isHidden || target.isDead || player.isDead) return;
+    if (target.isHidden || target.isDead || player.isDead) { release(); return; }
+
+    // Startup delay — stagger each enemy entering the fight
+    if (waitTimer > 0) { waitTimer--; target.velocity.x = 0; return; }
+
+    const activeEnemies = 1 + enemyPool.filter(e => !e.isHidden && !e.isDead).length;
+    // Speed: slightly slower with more enemies but never sluggish
+    const spd = Math.max(5.0, 6.5 - (activeEnemies - 1) * 0.25); // was max(3.8, 5.0-...)
+    const cdScale = Math.max(0.55, 1 - (activeEnemies - 1) * 0.07); // slightly faster CDs
+
     const dx       = player.position.x - target.position.x;
     const absDx    = Math.abs(dx);
     const grounded = target.velocity.y === 0;
+    const dir      = dx > 0 ? 1 : -1;
+
+    // Low HP → desperation: enemy becomes more aggressive
+    const lowHp    = target.health < 35;
+
     cd = Math.max(0, cd - 1);
     timer++;
+
     target.facingRight = dx > 0;
+
+    // ── EVADE: player is actively attacking → step back ────────────────────
+    const playerAttacking = player.isAttacking || player.isKnifeAttacking || player.isSpecialAttacking;
+    if (playerAttacking && absDx < 160 && grounded && state !== 'jump_atk') {
+      evadeTimer = 12; // was 22 — faster re-engage after evade
+    }
+    if (evadeTimer > 0) {
+      evadeTimer--;
+      target.velocity.x = -dir * spd * 0.9;  // step away from player
+      if (evadeTimer === 0 && !cd) {
+        // Punish immediately after evading (player's attack just finished)
+        if (claim()) { state = absDx < 140 ? 'punch' : 'approach'; timer = 0; }
+      }
+      return;
+    }
+
     switch (state) {
-      case 'approach':
-        target.velocity.x = dx > 0 ? 3.6 : -3.6;  // AI_SPEED * 0.9
-        if (player.position.y < target.position.y - 100 && grounded) target.velocity.y = -20;
-        if (absDx <= 130) {  // CLOSE_DIST ≈ CHAR_W(80) + 50
+
+      // ── FOOTSIE: maintain mid-range, look for opening ──────────────────────
+      case 'footsie': {
+        const idealDist = lowHp ? 110 : 145; // low HP → get closer
+        if (absDx > idealDist + 30) {
+          target.velocity.x = dir * spd * 0.75; // walk in slowly
+        } else if (absDx < idealDist - 30) {
+          target.velocity.x = -dir * spd * 0.6; // maintain gap
+        } else {
+          target.velocity.x = 0;
+        }
+
+        // Jump to follow if player is above
+        if (player.position.y < target.position.y - 90 && grounded) target.velocity.y = -16;
+
+        // After some footsie time, decide to attack (if it's our turn)
+        if (timer > 16 + idx * 4) { // was 28 + idx*8 — attacks faster
           const r = Math.random();
-          // No special or shield — enemies only punch, kick, jump-attack, or back off
-          state = r < 0.40 ? 'punch' : r < 0.70 ? 'kick' : r < 0.85 ? 'jump_atk' : 'back_off';
-          timer = 0;
+          if (absDx <= 150 && (lowHp || claim())) {
+            if (!lowHp) _attackerCount = Math.max(0, _attackerCount - 1); // claim handled inline
+            if (lowHp || myTurn) {
+              if (!myTurn) { _attackerCount++; myTurn = true; }
+              state = r < 0.45 ? 'dash_punch' : r < 0.80 ? 'dash_kick' : 'jump_atk';
+              timer = 0;
+            }
+          } else {
+            // Not our turn yet — reset timer and keep circling
+            timer = 0;
+          }
         }
         break;
-      case 'punch':
-        target.velocity.x = 0;
-        if (timer === 3 && !cd) { target.attack();       cd = 55; }
-        if (timer === 20) { state = Math.random() < 0.6 ? 'approach' : 'back_off'; timer = 0; }
+      }
+
+      // ── DASH PUNCH: close gap fast, jab ────────────────────────────────────
+      case 'dash_punch': {
+        if (timer < 4) {
+          target.velocity.x = -dir * spd * 0.5; // wind-up (shorter, was 6 frames)
+        } else if (timer < 9) {
+          target.velocity.x = dir * spd * 1.8;  // faster dash (was 1.5)
+        } else {
+          target.velocity.x = 0;
+          if (timer === 9 && !cd) { target.attack(); cd = Math.round(22 * cdScale); } // was 12, cd 32
+        }
+        if (timer >= 16) { release(); state = 'footsie'; timer = 0; } // was 22
         break;
-      case 'kick':
-        target.velocity.x = dx > 0 ? 2 : -2;
-        if (timer === 12 && !cd) { target.knifeAttack(); cd = 65; }
-        if (timer === 30) { state = 'approach'; timer = 0; }
+      }
+
+      // ── DASH KICK: step in and sword slash ─────────────────────────────────
+      case 'dash_kick': {
+        if (timer < 4) {
+          target.velocity.x = dir * spd * 0.4;
+        } else if (timer === 4 && !cd) {
+          target.knifeAttack();
+          cd = Math.round(28 * cdScale); // was 40
+          target.velocity.x = dir * spd * 1.3;
+        } else {
+          target.velocity.x *= 0.7;
+        }
+        if (timer >= 16) { release(); state = 'footsie'; timer = 0; } // was 22
         break;
-      case 'back_off':
-        target.velocity.x = dx > 0 ? -4 : 4;  // -AI_SPEED
-        if (timer > 28) { state = 'approach'; timer = 0; }
+      }
+
+      // ── JUMP ATTACK: leap in with aerial hit ───────────────────────────────
+      case 'jump_atk': {
+        if (timer === 1 && grounded) {
+          target.velocity.y = -16;
+          target.velocity.x = dir * spd * 1.1;
+        }
+        if (timer === 8 && !cd) { target.attack(); cd = Math.round(26 * cdScale); } // was frame 11, cd 38
+        if (timer > 26 && grounded) { release(); state = 'footsie'; timer = 0; } // was 34
         break;
-      case 'jump_atk':
-        if (timer === 1 && grounded) { target.velocity.y = -22; target.velocity.x = dx > 0 ? 4 : -4; }
-        if (timer === 14 && !cd) { target.attack(); cd = 50; }
-        if (timer > 40 && grounded) { state = 'approach'; timer = 0; }
+      }
+
+      // ── APPROACH: used when we're too far ─────────────────────────────────
+      case 'approach': {
+        target.velocity.x = dir * spd;
+        if (player.position.y < target.position.y - 90 && grounded) target.velocity.y = -16;
+        if (absDx <= 150) { state = 'footsie'; timer = 0; }
         break;
+      }
     }
-    if (timer > 200) { state = 'approach'; timer = 0; }
+
+    // ── Release turn slot after long inactivity ────────────────────────────
+    if (timer > 70) { release(); state = 'footsie'; timer = 0; } // was 100
   };
 }
 
-// Create a persistent tick function for each pool enemy
-const poolAITick = enemyPool.map(e => createAI(e));
+// Create pool AI (pass index for stagger)
+const poolAITick = enemyPool.map((e, i) => createAI(e, i));
 
 
 
@@ -1302,93 +1567,160 @@ const AI = {
   JUMP_BACK: 'jump_back'
 };
 
+// ─── Main Enemy AI — Real Fighting Logic ─────────────────────────────────────
+// Realistic fighter behavior: footsies, evade on player swing, punish on whiff,
+// combo chains, shield occasionally, desperation mode at low HP.
 let aiState      = AI.APPROACH;
 let aiTimer      = 0;
 let aiCooldown   = 0;
-const AI_SPEED   = 4;
-const CLOSE_DIST = CHAR_W + 50; // distance at which AI is "in range"
+let aiEvade      = 0;   // frames left in evade after player swings
+const AI_SPEED   = 6;          // was 4 — faster movement across the board
+const CLOSE_DIST = CHAR_W + 50;
 
 function tickEnemyAI() {
   if (enemy.isDead || player.isDead) return;
 
-  const dx        = player.position.x - enemy.position.x;
-  const absDx     = Math.abs(dx);
-  const grounded  = enemy.velocity.y === 0;
+  const dx       = player.position.x - enemy.position.x;
+  const absDx    = Math.abs(dx);
+  const grounded = enemy.velocity.y === 0;
+  const dir      = dx > 0 ? 1 : -1;
+  const lowHp    = enemy.health < 30; // desperation mode
 
   aiCooldown = Math.max(0, aiCooldown - 1);
   aiTimer++;
+  enemy.facingRight = dx > 0;
+
+  // ── EVADE: step back when player is attacking ──────────────────────────────
+  const playerSwinging = player.isAttacking || player.isKnifeAttacking || player.isSpecialAttacking;
+  if (playerSwinging && absDx < 170 && grounded) {
+    aiEvade = 12; // was 20 — shorter evade, re-engages faster
+  }
+  if (aiEvade > 0) {
+    aiEvade--;
+    enemy.velocity.x = -dir * AI_SPEED * 1.1; // step away
+    if (aiEvade === 0 && !aiCooldown) {
+      // Punish immediately after player's swing ends
+      aiState = absDx < 150 ? 'punish' : 'footsie';
+      aiTimer = 0;
+    }
+    return;
+  }
 
   switch (aiState) {
 
-    // Walk toward the player until close, then randomly pick behaviour
-    case AI.APPROACH: {
-      enemy.velocity.x = dx > 0 ? AI_SPEED : -AI_SPEED;
+    // ── FOOTSIE: neutral spacing, wait for opening ─────────────────────────
+    case 'footsie': {
+      const ideal = lowHp ? 100 : 135;
+      if (absDx > ideal + 25)      enemy.velocity.x = dir  * AI_SPEED * 0.85;
+      else if (absDx < ideal - 25) enemy.velocity.x = -dir * AI_SPEED * 0.7;
+      else                         enemy.velocity.x = 0;
 
-      // Jump if player is significantly above
-      if (player.position.y < enemy.position.y - 100 && grounded) {
-        enemy.velocity.y = -20;
-      }
+      if (player.position.y < enemy.position.y - 90 && grounded) enemy.velocity.y = -16;
 
-      if (absDx <= CLOSE_DIST) {
-        // No special or shield — enemy only punches, kicks, jump-attacks, or backs off
+      if (aiTimer > 18) {  // was 32 — attacks twice as often
         const roll = Math.random();
-        if      (roll < 0.40) { aiState = AI.PUNCH;    }
-        else if (roll < 0.70) { aiState = AI.KICK;     }
-        else if (roll < 0.85) { aiState = AI.JUMP_ATK; }
-        else                  { aiState = AI.BACK_OFF; }
-        aiTimer = 0;
+        if (absDx <= 160) {
+          // 40% dash-punch, 30% sword slash, 15% combo, 10% jump, 5% back off
+          if      (roll < 0.40) aiState = 'dash_punch';
+          else if (roll < 0.70) aiState = AI.KICK;
+          else if (roll < 0.85) aiState = 'combo';
+          else if (roll < 0.95) aiState = AI.JUMP_ATK;
+          else                  aiState = AI.BACK_OFF;
+          aiTimer = 0;
+        } else {
+          aiState = AI.APPROACH; aiTimer = 0;
+        }
       }
       break;
     }
 
-    // Quick jab
-    case AI.PUNCH: {
-      enemy.velocity.x = 0;
-      if (aiTimer === 2 && !aiCooldown) { enemy.attack(); aiCooldown = 45; }
-      if (aiTimer === 18) { aiState = Math.random() < 0.6 ? AI.APPROACH : AI.BACK_OFF; aiTimer = 0; }
+    // ── APPROACH: close gap to footsie range ──────────────────────────────
+    case AI.APPROACH: {
+      enemy.velocity.x = dir * AI_SPEED * 1.5; // was 1.3
+      if (player.position.y < enemy.position.y - 80 && grounded) enemy.velocity.y = -16;
+      if (absDx <= CLOSE_DIST + 20) { aiState = 'footsie'; aiTimer = 0; }
       break;
     }
 
-    // Step in then kick
+    // ── DASH PUNCH: step back (telegraph) → burst in → jab ───────────────
+    case 'dash_punch': {
+      if (aiTimer < 5)                   enemy.velocity.x = -dir * AI_SPEED * 0.4; // wind-up
+      else if (aiTimer < 10)             enemy.velocity.x =  dir * AI_SPEED * 2.2; // dash
+      else                               enemy.velocity.x = 0;
+      if (aiTimer === 10 && !aiCooldown) { enemy.attack(); aiCooldown = 18; } // was 26
+      if (aiTimer >= 16) { aiState = Math.random() < 0.55 ? AI.KICK : 'footsie'; aiTimer = 0; } // was 20
+      break;
+    }
+
+    // ── KICK (sword slash): step in and lunge ─────────────────────────────
     case AI.KICK: {
-      enemy.velocity.x = dx > 0 ? 2 : -2;
-      if (aiTimer === 10 && !aiCooldown) { enemy.knifeAttack(); aiCooldown = 60; }
-      if (aiTimer === 28) { aiState = AI.APPROACH; aiTimer = 0; }
+      enemy.velocity.x = dir * AI_SPEED * 0.6;
+      if (aiTimer === 5 && !aiCooldown) { enemy.knifeAttack(); aiCooldown = 22; } // was frame 6, cd 34
+      if (aiTimer === 5) enemy.velocity.x = dir * AI_SPEED * 1.5; // lunge
+      if (aiTimer >= 14) { aiState = 'footsie'; aiTimer = 0; } // was 18
       break;
     }
 
-    // Retreat to reset
+    // ── COMBO: punch → kick back-to-back ──────────────────────────────────
+    case 'combo': {
+      enemy.velocity.x = dir * 1.5;
+      if (aiTimer === 3  && !aiCooldown) { enemy.attack();      aiCooldown = 10; } // was 14
+      if (aiTimer === 14 && !aiCooldown) { enemy.knifeAttack(); aiCooldown = 20; } // was 28
+      if (aiTimer >= 24) { aiState = AI.BACK_OFF; aiTimer = 0; } // was 30
+      break;
+    }
+
+    // ── PUNISH: instant counter when player whiffs ─────────────────────────
+    case 'punish': {
+      enemy.velocity.x = dir * AI_SPEED * 1.9; // burst in
+      if (aiTimer === 3  && !aiCooldown) { enemy.attack();      aiCooldown = 8;  } // was 12
+      if (aiTimer === 11 && !aiCooldown) { enemy.knifeAttack(); aiCooldown = 16; } // was 22
+      if (aiTimer >= 18) { aiState = 'footsie'; aiTimer = 0; } // was 24
+      break;
+    }
+
+    // ── BACK OFF: short retreat ────────────────────────────────────────────
     case AI.BACK_OFF: {
-      enemy.velocity.x = dx > 0 ? -AI_SPEED * 1.2 : AI_SPEED * 1.2;
-      if (aiTimer > 30) { aiState = AI.APPROACH; aiTimer = 0; }
+      enemy.velocity.x = -dir * AI_SPEED;
+      if (aiTimer > 10) { aiState = 'footsie'; aiTimer = 0; } // was 16
       break;
     }
 
-    // Jump Attack
+    // ── JUMP ATTACK: aerial dive ───────────────────────────────────────────
     case AI.JUMP_ATK: {
       if (aiTimer === 1 && grounded) {
-        enemy.velocity.y = -22;
-        enemy.velocity.x = dx > 0 ? AI_SPEED * 1.2 : -AI_SPEED * 1.2;
+        enemy.velocity.y = -16;
+        enemy.velocity.x = dir * AI_SPEED * 1.5;
       }
-      if (aiTimer === 14 && !aiCooldown) { enemy.attack(); aiCooldown = 50; }
-      if (aiTimer > 40 && grounded) { aiState = AI.APPROACH; aiTimer = 0; }
+      if (aiTimer === 8 && !aiCooldown) { enemy.attack(); aiCooldown = 22; } // was frame 10, cd 30
+      if (aiTimer > 24 && grounded) { aiState = 'footsie'; aiTimer = 0; } // was 30
       break;
     }
   }
 
+  // Desperation: low HP → skip footsie wait, go straight to attack
+  if (lowHp && aiState === 'footsie' && aiTimer > 10) { // was 16
+    aiState = Math.random() < 0.6 ? 'dash_punch' : 'combo';
+    aiTimer = 0;
+  }
+
   // Safety reset
-  if (aiTimer > 200) { aiState = AI.APPROACH; aiTimer = 0; }
+  if (aiTimer > 90) { aiState = 'footsie'; aiTimer = 0; }
 }
 
+
+
 // ─── Stage progression helpers ────────────────────────────────────────────────
+
 const gameOverScreen = document.getElementById('game-over-screen');
 const gameOverTitle  = document.getElementById('game-over-title');
 const gameOverSub    = document.getElementById('game-over-sub');
 const retryBtn       = document.getElementById('btn-retry');
+const btnStageSelect = document.getElementById('btn-stage-select');
 
 function updateEnemyHUD() {
-  const el = document.querySelector('.p2-health .player-name');
-  if (el) el.textContent = STAGES[currentStageIdx].enemyName;
+  // With random enemies, name comes from whoever is fighting not from the stage
+  // This is a no-op placeholder (handled by updateEnemyHealthHUD)
 }
 
 /** 
@@ -1437,13 +1769,13 @@ function updateEnemyHealthHUD() {
   badge.id = 'stage-badge';
   badge.innerHTML =
     '<div class="stage-badge-label">STAGE</div>' +
-    '<div class="stage-badge-num" id="stage-badge-num">1 / ' + STAGES.length + '</div>';
+    '<div class="stage-badge-num" id="stage-badge-num">1 / ' + BACKGROUNDS.length + '</div>';
   uiLayer.appendChild(badge);
 })();
 
 function updateStageBadge() {
   const el = document.getElementById('stage-badge-num');
-  if (el) el.textContent = (currentStageIdx + 1) + ' / ' + STAGES.length;
+  if (el) el.textContent = (currentStageIdx + 1) + ' / ' + BACKGROUNDS.length;
 }
 
 /** Flash a centred banner: ROUND X and enemy count */
@@ -1486,6 +1818,11 @@ function resetRound(omitPlayerPos = false) {
   particles.length = 0;
   gameActive       = true;
 
+  // Reset wave counter whenever entering a new round (not a wave continuation)
+  if (!omitPlayerPos) {
+    currentWaveIdx = 0;
+  }
+
   // --- Player ---
   player.reset();
   if (!omitPlayerPos) {
@@ -1502,8 +1839,16 @@ function resetRound(omitPlayerPos = false) {
   // --- Remote players: reset health so next round is fair ---
   Object.values(remotePlayers).forEach(rp => rp.reset());
 
-  // --- Enemy (swap sprite) ---
-  let stage = STAGES[currentStageIdx];
+  // --- Enemy (assign enemies based on stage progression) ---
+  // All stages start at 1 enemy, max grows by 1 per stage:
+  //   Stage 1: 1-2, Stage 2: 1-3, Stage 3: 1-4, Stage 4: 1-5, Stage 5: 1-6, Stage 6: 1-7
+  const totalEnemyCount = 1 + currentWaveIdx;
+  activeExtraCount = totalEnemyCount - 1; // extras = total - main enemy
+
+  // Pick distinct random enemies from the roster for each slot
+  const chosenEnemies = randomDistinct(ENEMY_ROSTER, totalEnemyCount);
+  const mainEnemy = chosenEnemies[0];
+
   enemy.reset();
   if (network.role === NetworkRole.CLIENT) {
     enemy.position.x = 80;
@@ -1512,31 +1857,24 @@ function resetRound(omitPlayerPos = false) {
     enemy.position.x = 760;
     enemy.facingRight = false;
   }
-  enemy.position.y          = 10;
-  enemy.name                = stage.enemyName;
-  enemy.accentColor         = stage.accentColor;
-  
-  const newImg = new Image();
-  newImg.src   = stage.enemySrc;
-  enemy.img    = newImg;
-
-  // ─ Activate a random number of extra enemies from round 2 onwards ──────────
-  const roundNum = currentStageIdx + 1;
-  // Round 1: 0 extras. Round 2+: randomly pick 1-3 extras (= total 2-4 enemies)
-  activeExtraCount = roundNum >= 2 ? (1 + Math.floor(Math.random() * 3)) : 0;
+  enemy.position.y  = -250; // Dynamic Sky Drop
+  enemy.name        = mainEnemy.name;
+  enemy.accentColor = mainEnemy.accentColor;
+  // Load + strip white background for the main enemy
+  loadEnemyImg(mainEnemy.src).then(canvas => { enemy.img = canvas; });
 
   enemyPool.forEach((e, i) => {
-    e.reset(); // Reset all pool enemies first
+    e.reset();
     if (i < activeExtraCount) {
+      const extraEnemy = chosenEnemies[i + 1];
       e.isHidden          = false;
       e.position.x        = EXTRA_ENEMY_SPAWN_X[i];
-      e.position.y        = 10;
+      e.position.y        = -250 - (i * 80); // Staggered Sky Drop for multiple enemies
       e.facingRight       = false;
-      e.name              = stage.enemyName + ' ' + (i + 2);
-      e.accentColor       = EXTRA_ENEMY_COLORS[i];
-      const img = new Image();
-      img.src   = stage.enemySrc;
-      e.img     = img;
+      e.name              = extraEnemy ? extraEnemy.name : mainEnemy.name;
+      e.accentColor       = EXTRA_ENEMY_COLORS[i]; // keep the pool colors (no change)
+      const poolSrc = extraEnemy ? extraEnemy.src : mainEnemy.src;
+      loadEnemyImg(poolSrc).then(canvas => { e.img = canvas; });
     } else {
       e.isHidden = true;
       e.isDead   = true;
@@ -1545,33 +1883,40 @@ function resetRound(omitPlayerPos = false) {
   });
 
   // Show how many enemies incoming via a quick banner
-  const totalEnemies = 1 + activeExtraCount;
-  showRoundBanner(currentStageIdx + 1, totalEnemies);
+  showRoundBanner(currentStageIdx + 1, totalEnemyCount);
 
   // --- HUD ---
+  // Player HP scaling per enemy count (balanced):
+  //   1v1=100, 1v2=110, 1v3=140, 1v4=170, 1v5+=400 (cap)
+  const bonusHp = totalEnemyCount === 1
+    ? 100
+    : Math.min(400, 50 + totalEnemyCount * 30);
+  player.health     = bonusHp;
+  player._maxHealth = bonusHp;  // used by health bar % calculation
+
   game.p1HealthBar.style.width   = '100%';
   game.displayText.style.display = 'none';
-  updateEnemyHealthHUD(); // Replaced updateEnemyHUD() for collective tracking
+  updateEnemyHealthHUD();
   updateStageBadge();
 
   // --- AI ---
   aiState    = AI.APPROACH;
   aiTimer    = 0;
   aiCooldown = 0;
-  
-  // Pivot AI based on connections: Solo = Samurai, Duo = PvP
+
+  // Pivot AI based on connections: Solo = AI, Online = PvP
   refreshAI();
 
-  // Reset name based on current persona
-  stage = STAGES[currentStageIdx];
   if (enemy.isAI) {
-    enemy.name = stage.enemyName;
-    const enemyImg = new Image();
-    enemyImg.src = stage.enemySrc;
-    enemy.img = enemyImg;
     const p2Name = document.querySelector('.p2-health .player-name');
     if (p2Name) p2Name.textContent = enemy.name;
   }
+
+  // --- Timer: reset countdown and restart ---
+  clearTimeout(timerId);
+  countdown = 60;
+  game.timerEl.innerHTML = countdown;
+  decreaseTimer();
 }
 
 let isTransitioning     = false;
@@ -1584,6 +1929,7 @@ function goToStage(idx) {
   transitionStep      = 'walk-out';
   isTransitioning     = true;
   clearTimeout(timerId);
+  currentWaveIdx      = 0;
   
   // Disable boundary clamping so player can walk off-screen
   player.clamping = false;
@@ -1593,37 +1939,64 @@ function goToStage(idx) {
 }
 
 function showGameOver() {
-  gameActive              = false;
+  gameActive = false;
   gameOverTitle.textContent = 'GAME OVER';
-  gameOverSub.textContent   = 'Defeated at Stage ' + STAGES[currentStageIdx].id;
+  gameOverSub.textContent   = 'Defeated at ' + BACKGROUNDS[currentStageIdx].location;
+  retryBtn.textContent = '▶ RETRY';
   gameOverScreen.classList.remove('hidden');
   requestAnimationFrame(() => gameOverScreen.classList.add('visible'));
 }
 
 function showVictory() {
-  gameActive              = false;
-  gameOverTitle.textContent = '🏆 CHAMPION!';
-  gameOverSub.textContent   = 'You conquered all stages!';
+  gameActive = false;
+  gameOverTitle.textContent = '🏆 VICTORY!';
+  gameOverSub.textContent   = BACKGROUNDS[currentStageIdx].location + ' — CLEARED!';
+  retryBtn.textContent = '▶ PLAY AGAIN';
   gameOverScreen.classList.remove('hidden');
   requestAnimationFrame(() => gameOverScreen.classList.add('visible'));
 }
 
+// RETRY: restart same stage 
 retryBtn.addEventListener('click', () => {
   gameOverScreen.classList.remove('visible');
   setTimeout(() => {
     gameOverScreen.classList.add('hidden');
-    currentStageIdx = 0;
+    currentWaveIdx = 0;
     resetRound();
   }, 500);
 });
 
+// SELECT STAGE button: open the full-screen stage selector
+if (btnStageSelect) {
+  btnStageSelect.addEventListener('click', () => {
+    gameOverScreen.classList.remove('visible');
+    setTimeout(() => {
+      gameOverScreen.classList.add('hidden');
+      showStageSelect();
+    }, 400);
+  });
+}
+
 function handlePlayerWin() {
-  const next = currentStageIdx + 1;
-  if (next < STAGES.length) {
-    goToStage(next);
-  } else {
-    showVictory();
+  // All stages start at 1 enemy, max = stageIdx + 2
+  // Stage 1: max 2, Stage 2: max 3, Stage 3: max 4, Stage 4: max 5, Stage 5: max 6, Stage 6: max 7
+  const maxEnemiesForStage = currentStageIdx + 2;
+  const currentTotal = 1 + currentWaveIdx;
+
+  if (currentTotal < maxEnemiesForStage && network.role === NetworkRole.OFFLINE) {
+    currentWaveIdx++;
+    setTimeout(() => {
+      game.displayText.style.display = 'none';
+      resetRound(true);
+    }, 1500);
+    return;
   }
+
+  if (currentStageIdx + 1 < BACKGROUNDS.length) {
+    unlockedStageIdx = Math.max(unlockedStageIdx, currentStageIdx + 1);
+    updateStageBarHighlight();
+  }
+  showVictory();
 }
 
 function handlePlayerLose() {
@@ -1634,18 +2007,19 @@ function handlePlayerLose() {
 let countdown = 60;
 let timerId;
 function decreaseTimer() {
-  if (!gameActive) return;
+  if (!gameActive || window.isHeroPopupActive) return;
   if (countdown > 0) {
     timerId = setTimeout(decreaseTimer, 1000);
     countdown--;
     game.timerEl.innerHTML = countdown;
   }
   if (countdown === 0) {
-    determineWinner({
-      player, enemy, timerId, game,
-      onPlayerWin:  handlePlayerWin,
-      onPlayerLose: handlePlayerLose,
-    });
+    // Time out = player couldn't kill enemies in time = player loses
+    gameActive = false;
+    clearTimeout(timerId);
+    game.displayText.innerHTML = 'TIME UP! ⏰';
+    game.displayText.style.display = 'flex';
+    setTimeout(() => handlePlayerLose(), 2000);
   }
 }
 
@@ -1690,13 +2064,15 @@ function animate() {
   } else {
     // Regular Movement Input
     player.velocity.x = 0;
-    if (keys.a.pressed) { player.velocity.x = -5; player.lastKey = 'a'; }
-    if (keys.d.pressed) { player.velocity.x =  5; player.lastKey = 'd'; }
+    if (!window.isHeroPopupActive) {
+      if (keys.a.pressed) { player.velocity.x = -5; player.lastKey = 'a'; }
+      if (keys.d.pressed) { player.velocity.x =  5; player.lastKey = 'd'; }
+    }
   }
 
   // AI & Physics
   refreshAI();
-  if (gameActive) {
+  if (gameActive && !window.isHeroPopupActive) {
     if (enemy.isAI) {
       tickEnemyAI();
     } else if (network.role === NetworkRole.CLIENT) {
@@ -1764,27 +2140,37 @@ function animate() {
           const hx = victim.position.x + CHAR_W / 2;
           const hy = victim.position.y + CHAR_H * 0.4;
           let dmg = 0;
-          if (attacker.isAttacking)        dmg = 10;
-          else if (attacker.isKnifeAttacking)  dmg = 15;
-          else if (attacker.isSpecialAttacking) dmg = 25;
-
-          // REDUCED DAMAGE: If facing 3+ enemies, player takes 80% less damage
-          const activeEnemies = allFighters.length - 1;
-          if (activeEnemies >= 3 && victim === player && dmg > 0) {
-            dmg = Math.ceil(dmg * 0.2); // 80% reduction
+          if (attackerIsPlayer) {
+            // ── Player hitting enemy ──────────────────────────────────────────
+            // Slightly reduced so enemies take real effort to kill
+            if (attacker.isAttacking)             dmg = 8;   // was 10
+            else if (attacker.isKnifeAttacking)   dmg = 12;  // was 15
+            else if (attacker.isSpecialAttacking) dmg = 22;  // was 25
+          } else {
+            // ── Enemy hitting player ──────────────────────────────────────────
+            // NO dmgMult reduction — turn system already limits simultaneous attackers.
+            // Higher base damage so enemies are genuinely dangerous.
+            if (attacker.isAttacking)             dmg = 15;  // was 10 * 0.55–1.0
+            else if (attacker.isKnifeAttacking)   dmg = 22;  // was 15 * 0.55–1.0
+            else if (attacker.isSpecialAttacking) dmg = 35;  // was 25 * 0.55–1.0
           }
+
+
 
           if (dmg >= 0 && (attacker.isAttacking || attacker.isKnifeAttacking || attacker.isSpecialAttacking)) {
             // Regular attacks reset on hit; Special attack stays active (multi-hit window)
             if (attacker.isAttacking)      attacker.isAttacking      = false;
             if (attacker.isKnifeAttacking) attacker.isKnifeAttacking = false;
 
-            // Hit-rate limiter: special can hit same enemy max once per 400ms
+            // Hit-rate limiter: special can hit same target max once per 400ms
+            // FIX: use a unique key per attacker so pool enemies don't block each other
             const now = Date.now();
             victim._lastHitBy = victim._lastHitBy || {};
-            const hitKey = `${attacker === player ? 'p' : 'e'}_sp`;
-            const tooSoon = attacker.isSpecialAttacking 
-              && victim._lastHitBy[hitKey] 
+            const hitKey = attacker === player
+              ? 'player_sp'
+              : `enemy_${enemyPool.indexOf(attacker)}_sp`; // unique per enemy slot
+            const tooSoon = attacker.isSpecialAttacking
+              && victim._lastHitBy[hitKey]
               && (now - victim._lastHitBy[hitKey] < 400);
 
             if (!tooSoon) {
@@ -1793,9 +2179,10 @@ function animate() {
               createHitSparks(hx, hy);
               if (victim.isShielding) createShieldSparks(hx, hy);
               else {
-                if (dmg === 10)      createSwordSparks(hx, hy, attacker.facingRight);
-                else if (dmg === 15) createSlashSparks(hx, hy, attacker.facingRight);
-                else if (dmg === 25) createSkillSparks(hx, hy);
+                // FIX: use range check (dmgMult can make values non-integer)
+                if (dmg <= 12)      createSwordSparks(hx, hy, attacker.facingRight);
+                else if (dmg <= 20) createSlashSparks(hx, hy, attacker.facingRight);
+                else                createSkillSparks(hx, hy);
               }
 
               if (network.role === NetworkRole.OFFLINE) {
@@ -1811,7 +2198,9 @@ function animate() {
                 else                      Sound.playPunch();
                 
                 if (victim === player) {
-                  game.p1HealthBar.style.width = player.health + '%';
+                  // FIX: percentage of maxHealth (player can have >100 HP with bonus)
+                  const maxHp = player._maxHealth || 100;
+                  game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
                 } else {
                   updateEnemyHealthHUD();
                 }
@@ -1867,12 +2256,11 @@ function animate() {
           game.displayText.style.display = 'block';
           setTimeout(() => {
             game.displayText.style.display = 'none';
-            // ── Stage progression (same as offline mode) ──────────────────
-            const next = currentStageIdx + 1;
-            if (next < STAGES.length) {
-              goToStage(next);          // walk to next stage
+            // ── Return to stage select (host and client both go to picker) ──
+            if (hostWon) {
+              showStageSelect();
             } else {
-              showVictory();            // all stages cleared!
+              showGameOver();
             }
           }, 2500);
         }
@@ -1968,13 +2356,13 @@ function applyPlayerData(p, d, skipHp = false) {
 
 // ─── Keyboard & Buttons ──────────────────────────────────────────────────────
 window.addEventListener('keydown', (e) => {
-  if (player.isDead || isTransitioning) return;
+  if (player.isDead || isTransitioning || window.isHeroPopupActive) return;
   const px = player.position.x + (player.facingRight ? player.width + 20 : -20);
   const py = player.position.y + player.height * 0.38;
   switch (e.key) {
     case 'a': case 'A': keys.a.pressed = true;  break;
     case 'd': case 'D': keys.d.pressed = true;  break;
-    case 'w': case 'W': if (player.velocity.y === 0) { player.velocity.y = -22; Sound.playJump(); } break;
+    case 'w': case 'W': if (player.velocity.y === 0) { player.velocity.y = -16; Sound.playJump(); } break;
     case 's': case 'S': selectSkill('shield'); player.shield(); break;
     case ' ': createSwordSparks(px, py, player.facingRight); player.attack(); e.preventDefault(); break;
     case 'k': case 'K': selectSkill('sword'); createSlashSparks(px, py, player.facingRight); player.knifeAttack(); break;
@@ -2002,16 +2390,16 @@ function btn(id, onDown, onUp = () => {}) {
   el.addEventListener('touchend', up, { passive: false });
 }
 
-btn('btn-left',  () => { keys.a.pressed = true; }, () => { keys.a.pressed = false; });
-btn('btn-right', () => { keys.d.pressed = true; }, () => { keys.d.pressed = false; });
+btn('btn-left',  () => { if (!window.isHeroPopupActive) keys.a.pressed = true; }, () => { keys.a.pressed = false; });
+btn('btn-right', () => { if (!window.isHeroPopupActive) keys.d.pressed = true; }, () => { keys.d.pressed = false; });
 btn('btn-up',    () => {
-  if (!player.isDead && player.velocity.y === 0) {
-    player.velocity.y = -22;
+  if (!player.isDead && player.velocity.y === 0 && !window.isHeroPopupActive) {
+    player.velocity.y = -16;
     Sound.playJump();
   }
 });
 btn('btn-attack', () => {
-  if (!player.isDead) player.attack();
+  if (!player.isDead && !window.isHeroPopupActive) player.attack();
 });
 
 const SKILL_BTNS = [
@@ -2028,9 +2416,9 @@ function selectSkill(skill) {
   });
 }
 
-btn('btn-kick',    () => { if (!player.isDead) { selectSkill('sword'); player.knifeAttack(); } });
-btn('btn-special', () => { if (!player.isDead) { useHeroAbility(); } });
-btn('btn-shield',  () => { if (!player.isDead) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
+btn('btn-kick',    () => { if (!player.isDead && !window.isHeroPopupActive) { selectSkill('sword'); player.knifeAttack(); } });
+btn('btn-special', () => { if (!player.isDead && !window.isHeroPopupActive) { useHeroAbility(); } });
+btn('btn-shield',  () => { if (!player.isDead && !window.isHeroPopupActive) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
 
 // Mute button
 const muteBtn = document.getElementById('btn-mute');
@@ -2047,21 +2435,169 @@ const heroBtns = document.querySelectorAll('.hero-btn');
 const p1NameLabel = document.querySelector('.p1-health .player-name');
 
 heroBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', (e) => {
     // 1. Update UI Classes
     heroBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
     // 2. Change Player Sprite, Name & HeroKey
-    const newSrc  = btn.getAttribute('data-src');
-    const newName = btn.getAttribute('data-name');
-    
-    const img = new Image();
-    img.src   = newSrc;
-    player.img    = img;
-    player.name   = newName;
-    player.heroKey = newName; // DD | HARATU | LUFFY | DEFAULT
-    
+    const newSrc   = btn.getAttribute('data-src');
+    const newName  = btn.getAttribute('data-name');
+    const isVideo  = btn.getAttribute('data-video') === 'true';
+
+    let delayPlay = null;
+
+    if (e && e.isTrusted) {
+      // Create visual popup
+      const pop = document.createElement('div');
+      pop.style.cssText = `
+        position: absolute; top: 50%; left: 50%; z-index: 9999; opacity: 0;
+        transform: translate(-50%, -50%) scale(0.1); pointer-events: none;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      `;
+
+      const container = document.createElement('div');
+      container.style.cssText = `
+        display: flex; flex-direction: column; align-items: center;
+        background: rgba(0,0,0,0.85); padding: 30px; border: 3px solid #00e5ff;
+        border-radius: 12px; box-shadow: 0 0 40px rgba(0,229,255,0.4);
+      `;
+
+      const previewCanvas = document.createElement('canvas');
+      previewCanvas.width = 300; previewCanvas.height = 300;
+      previewCanvas.style.cssText = `width: 280px; height: 280px; filter: drop-shadow(0 0 20px #00e5ff); object-fit: contain;`;
+      container.appendChild(previewCanvas);
+
+      // Label below canvas
+      const labels = document.createElement('div');
+      labels.style.cssText = `display:flex; flex-direction:column; align-items:center;`;
+      labels.innerHTML = `
+        <div style="color: #fff; font-family: 'Press Start 2P', cursive; font-size: 18px; margin-top: 20px; text-shadow: 0 0 10px #00e5ff;">SELECTED:</div>
+        <div style="color: #00e5ff; font-family: 'Press Start 2P', cursive; font-size: 24px; margin-top: 10px; text-shadow: 0 0 15px #00e5ff;">${newName}</div>
+      `;
+      container.appendChild(labels);
+
+      const pctx = previewCanvas.getContext('2d');
+      let stopLoop = false;
+
+      if (isVideo) {
+        const v = document.createElement('video');
+        v.src = newSrc; v.muted = true; v.loop = true; v.playsInline = true;
+        v.play().catch(()=>{});
+        
+        const tempC = document.createElement('canvas');
+        const tctx  = tempC.getContext('2d', { willReadFrequently: true });
+
+        const renderLoop = () => {
+          if (stopLoop) return;
+          if (v.readyState >= 2) {
+            if (tempC.width !== v.videoWidth) {
+              tempC.width = v.videoWidth; tempC.height = v.videoHeight;
+            }
+            tctx.drawImage(v, 0, 0);
+            const id = tctx.getImageData(0, 0, tempC.width, tempC.height);
+            const d  = id.data;
+            // Simple fast chroma-key for preview (Sample top-left)
+            const br = d[0], bg = d[1], bb = d[2];
+            for (let i=0; i<d.length; i+=4) {
+              const diff = Math.max(Math.abs(d[i]-br), Math.abs(d[i+1]-bg), Math.abs(d[i+2]-bb));
+              if (diff < 70) d[i+3] = 0;
+            }
+            tctx.putImageData(id, 0, 0);
+            pctx.clearRect(0,0,300,300);
+            pctx.drawImage(tempC, 0, 0, tempC.width, tempC.height, 0, 0, 300, 300);
+          }
+          requestAnimationFrame(renderLoop);
+        };
+        renderLoop();
+      } else {
+        loadEnemyImg(newSrc).then(canvas => {
+          pctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 300, 300);
+        });
+      }
+
+      pop.appendChild(container);
+      document.getElementById('game-container').appendChild(pop);
+
+      
+      requestAnimationFrame(() => {
+        pop.style.transform = 'translate(-50%, -50%) scale(1)';
+        pop.style.opacity = '1';
+      });
+
+      window.isHeroPopupActive = true;
+      delayPlay = new Promise(resolve => {
+        setTimeout(() => {
+          pop.style.transform = 'translate(-50%, -50%) scale(1.5)';
+          pop.style.opacity = '0';
+          pop.style.filter = 'blur(10px)';
+          setTimeout(() => {
+            stopLoop = true;
+            pop.remove();
+            window.isHeroPopupActive = false;
+            if (gameActive) { clearTimeout(timerId); decreaseTimer(); }
+          }, 400);
+          resolve();
+        }, 1500);
+      });
+    } else {
+      delayPlay = Promise.resolve();
+    }
+
+
+    if (isVideo) {
+      // ── Video hero: create a hidden <video> element ──────────────────────
+      // Clean up any previous video hero
+      if (player._videoEl) {
+        player._videoEl.pause();
+        player._videoEl.remove();
+      }
+      const vid = document.createElement('video');
+      vid.src      = newSrc;
+      vid.loop     = true;
+      vid.muted    = true;
+      vid.playsInline = true;
+      vid.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+      document.body.appendChild(vid);
+
+      delayPlay.then(() => {
+        vid.play().catch(() => {});
+      });
+
+      player._videoEl = vid;
+      player.img      = vid; // ctx.drawImage works with <video>!
+
+      // ── Static fallback: show bg-removed thumbnail until video is ready ──
+      // Find matching thumbnail PNG (same name, .png extension)
+      const thumbSrc = newSrc.replace(/\.mp4$/, '.png');
+      loadEnemyImg(thumbSrc).then(thumbCanvas => {
+        // Only apply if video hasn't started playing yet
+        if (player._videoEl === vid && vid.readyState < 2) {
+          player.img = thumbCanvas;
+          // Switch back to video once it can play
+          const onCanPlay = () => {
+            if (player._videoEl === vid) player.img = vid;
+            vid.removeEventListener('canplay', onCanPlay);
+          };
+          vid.addEventListener('canplay', onCanPlay);
+        }
+      });
+    } else {
+      // ── Normal image hero ───────────────────────────────────────────────
+      if (player._videoEl) {
+        player._videoEl.pause();
+        player._videoEl.remove();
+        player._videoEl = null;
+      }
+      // Use loadEnemyImg so the grey/white background is stripped via canvas
+      loadEnemyImg(newSrc).then(canvas => {
+        player.img = canvas;
+      });
+    }
+
+    player.name    = newName;
+    player.heroKey = newName; // DD | HARATU | LUFFY | DEFAULT | SHADOW WARRIOR
+
     if (p1NameLabel) p1NameLabel.textContent = newName;
 
     // 3. Update ability badge HUD
@@ -2071,6 +2607,72 @@ heroBtns.forEach(btn => {
 
 // Seed badge on startup
 updateAbilityBadge();
+
+// ── Set Video Hero as Default ──
+// Use the first hero button's thumbnail so the character appears immediately,
+// then upgrade to video once the user interacts (satisfies browser autoplay policy).
+(function setDefaultHero() {
+  const firstBtn = heroBtns[0];
+  if (!firstBtn) return;
+
+  // Mark it active in the UI
+  heroBtns.forEach(b => b.classList.remove('active'));
+  firstBtn.classList.add('active');
+
+  const newSrc  = firstBtn.getAttribute('data-src');  // hero1.mp4
+  const newName = firstBtn.getAttribute('data-name');
+  const isVideo = firstBtn.getAttribute('data-video') === 'true';
+
+  player.name    = newName;
+  player.heroKey = newName;
+  if (p1NameLabel) p1NameLabel.textContent = newName;
+  updateAbilityBadge();
+
+  if (isVideo) {
+    // Load the static thumbnail (bg-removed) immediately so the hero is visible
+    const thumbSrc = newSrc.replace(/\.mp4$/, '.png');
+    loadEnemyImg(thumbSrc).then(thumbCanvas => {
+      // Only set if hero hasn't been changed by user yet
+      if (player.name === newName && !(player._videoEl)) {
+        player.img = thumbCanvas;
+      }
+    });
+
+    // On first user interaction, upgrade to the live video
+    const upgradeToVideo = () => {
+      // Only upgrade if the user hasn't manually selected a different hero
+      if (player.name !== newName) return;
+
+      if (player._videoEl) {
+        player._videoEl.pause();
+        player._videoEl.remove();
+      }
+      const vid = document.createElement('video');
+      vid.src       = newSrc;
+      vid.loop      = true;
+      vid.muted     = true;
+      vid.playsInline = true;
+      vid.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;';
+      document.body.appendChild(vid);
+      vid.play().catch(() => {});
+
+      player._videoEl = vid;
+
+      // Switch to live video once it has frames
+      const onCanPlay = () => {
+        if (player._videoEl === vid && player.name === newName) player.img = vid;
+        vid.removeEventListener('canplay', onCanPlay);
+      };
+      vid.addEventListener('canplay', onCanPlay);
+    };
+
+    // Browsers allow play() after any user gesture
+    window.addEventListener('keydown',     upgradeToVideo, { once: true });
+    window.addEventListener('pointerdown', upgradeToVideo, { once: true });
+  } else {
+    loadEnemyImg(newSrc).then(canvas => { player.img = canvas; });
+  }
+})();
 
 // ─── Sword Selection ──────────────────────────────────────────────────────────
 const swordBtns = document.querySelectorAll('.sword-btn');
@@ -2151,7 +2753,8 @@ function setupLobby() {
   network.onConnect = () => {
     lobbyScreen.classList.add('hidden');
     uiLayer.style.display = 'flex';
-    resetRound();
+    // Show stage select so both players choose the battlefield
+    showStageSelect();
   };
 
   network.onData = (peerId, payload) => {
@@ -2363,11 +2966,13 @@ btnOffline.addEventListener('click', () => {
   network.role = NetworkRole.OFFLINE;
   lobbyScreen.classList.add('hidden');
   uiLayer.style.display = 'flex';
-  resetRound();
+  // Show stage select first so player can choose their battlefield
+  showStageSelect();
 });
 
 // ─── STARTUP ─────────────────────────────────────────────────────────────────
 try {
+  buildStageSelectUI(); // Populate stage-select UI grids before anything else
   animate();
   setupLobby();
 } catch (err) {
