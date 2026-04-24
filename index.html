@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="description" content="Fighter Game - Browser-Based 2D Fighting Game. Play Solo or Multiplayer Arena." />
+  <meta name="description" content="Fighter Game – Browser-Based 2D Fighting Game. Choose your Shadow Warrior. Master deadly weapons. Dominate the arena." />
   <meta name="theme-color" content="#0d0d0d" />
   <title>Fighter Game | Enter the Arena</title>
 
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/landing.css" />
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,11 +16,11 @@
 </head>
 <body>
 
-  <!-- Background Animated Particles / Grid -->
+  <!-- Animated Background -->
   <div id="bg-particles"></div>
 
-  <!-- Header Section -->
-  <header class="navbar">
+  <!-- ===== NAVBAR ===== -->
+  <header class="navbar" id="navbar">
     <div class="nav-container">
       <div class="logo">
         <a href="#hero">Fighter<span class="highlight">Game</span></a>
@@ -30,94 +30,190 @@
         <a href="#roster">Roster</a>
         <a href="#weapons">Weapons</a>
         <a href="#controls">Controls</a>
-        <a href="game.html" class="btn-play-nav">PLAY NOW</a>
+        <a href="game.html" class="btn-play-nav">⚔️ PLAY NOW</a>
       </nav>
-      <button class="mobile-menu-btn" aria-label="Toggle Navigation">
-        <span></span>
-        <span></span>
-        <span></span>
+      <button class="mobile-menu-btn" id="mobileBtn" aria-label="Toggle Navigation">
+        <span></span><span></span><span></span>
       </button>
     </div>
   </header>
 
-  <!-- Mobile Dropdown -->
+  <!-- Mobile Menu -->
   <div class="mobile-menu" id="mobileMenu">
     <a href="#features" class="mobile-link">Features</a>
     <a href="#roster" class="mobile-link">Roster</a>
     <a href="#weapons" class="mobile-link">Weapons</a>
     <a href="#controls" class="mobile-link">Controls</a>
-    <a href="game.html" class="btn-play-mobile">PLAY NOW</a>
+    <a href="game.html" class="btn-play-mobile">⚔️ PLAY NOW</a>
   </div>
 
   <main>
-    <!-- Hero Section -->
+    <!-- ===== HERO SECTION ===== -->
     <section id="hero" class="hero-section">
+      <!-- Cinematic video preview in background -->
+      <div class="hero-video-bg">
+        <video autoplay muted loop playsinline id="hero-bg-video">
+          <source src="/assets/hero/hero1.mp4" type="video/mp4">
+        </video>
+        <div class="hero-video-overlay"></div>
+      </div>
+
       <div class="hero-content fade-in">
-        <h1 class="hero-title">STEP INTO THE ARENA.<br>MASTER THE <span class="highlight">BLADE.</span></h1>
-        <p class="hero-sub">Experience intense 2D browser-based combat. Singleplayer campaigns, WebRTC Multiplayer, and devastating combos.</p>
+        <div class="hero-badge">⚔️ BROWSER-BASED 2D COMBAT</div>
+        <h1 class="hero-title">STEP INTO<br>THE <span class="highlight">ARENA.</span></h1>
+        <p class="hero-sub">
+          Choose your Shadow Warrior. Master deadly weapons. Defeat waves of enemies across challenging stages. Play Solo or challenge friends via <strong>WebRTC Multiplayer</strong>.
+        </p>
         <div class="hero-actions">
-          <a href="game.html" class="btn-primary glow-effect">⚔️ PLAY NOW</a>
-          <a href="#features" class="btn-secondary">Learn More</a>
+          <a href="game.html" class="btn-primary glow-effect" id="cta-play-hero">⚔️ PLAY NOW</a>
+          <a href="#features" class="btn-secondary" id="cta-learn">Learn More ↓</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-item">
+            <span class="stat-num">5</span>
+            <span class="stat-label">Heroes</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">4</span>
+            <span class="stat-label">Weapons</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">∞</span>
+            <span class="stat-label">Stages</span>
+          </div>
         </div>
       </div>
+
       <div class="hero-graphic fade-in-up">
-        <!-- Mockup image or character overlay -->
-        <img src="/assets/hero/lufy.png" alt="Showcase character" class="hero-image floating">
+        <div class="hero-glow-ring"></div>
+        <img src="/assets/hero/hero1.png" alt="Shadow Warrior" class="hero-image floating" id="hero-showcase-img">
+        <div class="hero-name-tag" id="hero-name-tag">SHADOW WARRIOR I</div>
+      </div>
+
+      <div class="scroll-indicator">
+        <div class="scroll-dot"></div>
       </div>
     </section>
 
-    <!-- Key Features Section -->
+    <!-- ===== FEATURES SECTION ===== -->
     <section id="features" class="features-section section-padding">
       <div class="container fade-in">
+        <div class="section-label">WHY PLAY</div>
         <h2 class="section-heading">GAME <span class="highlight">FEATURES</span></h2>
         <div class="features-grid">
-          <!-- Feature Card 1 -->
-          <div class="feature-card glass-panel">
-            <div class="feature-icon">🌐</div>
-            <h3 class="feature-title">Offline & Online Arena</h3>
-            <p class="feature-desc">Seamlessly transition from fighting intelligent AI to challenging friends via smooth WebRTC Multiplayer combat.</p>
+          <div class="feature-card glass-panel" id="feat-1">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">🌐</div>
+            </div>
+            <h3 class="feature-title">Online & Offline Arena</h3>
+            <p class="feature-desc">Battle intelligent AI in singleplayer campaigns or challenge real opponents worldwide with seamless <strong>WebRTC peer-to-peer multiplayer</strong>.</p>
           </div>
-          <!-- Feature Card 2 -->
-          <div class="feature-card glass-panel">
-            <div class="feature-icon">⚔️</div>
+          <div class="feature-card glass-panel" id="feat-2">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">⚔️</div>
+            </div>
             <h3 class="feature-title">Weapon Arsenal</h3>
-            <p class="feature-desc">Equip unique weapons like the Light Blade, Heavy Blade, Dragon Slayer, and Volt Blade before combat.</p>
+            <p class="feature-desc">Equip one of <strong>4 unique weapons</strong>: Light Blade, Heavy Blade, Dragon Slayer, or Volt Blade — each with distinct power and reach.</p>
           </div>
-          <!-- Feature Card 3 -->
-          <div class="feature-card glass-panel">
-            <div class="feature-icon">✨</div>
-            <h3 class="feature-title">Devastating Skills</h3>
-            <p class="feature-desc">Unleash ultimate hero abilities like the "Fury Storm" and unique character spells to dominate the battlefield.</p>
+          <div class="feature-card glass-panel" id="feat-3">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">✨</div>
+            </div>
+            <h3 class="feature-title">Ultimate Abilities</h3>
+            <p class="feature-desc">Unleash devastating hero skills like the <strong>Fury Storm tornado</strong>. Each Shadow Warrior brings a unique ultimate to turn the tide of battle.</p>
           </div>
-          <!-- Feature Card 4 -->
-          <div class="feature-card glass-panel">
-            <div class="feature-icon">📱</div>
+          <div class="feature-card glass-panel" id="feat-4">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">🗺️</div>
+            </div>
+            <h3 class="feature-title">Stage Progression</h3>
+            <p class="feature-desc">Conquer a <strong>multi-stage campaign</strong> with escalating enemy difficulty. Defeat bosses to unlock new arenas and harder challenges.</p>
+          </div>
+          <div class="feature-card glass-panel" id="feat-5">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">🏆</div>
+            </div>
+            <h3 class="feature-title">Score Leaderboard</h3>
+            <p class="feature-desc">Track your best runs with an <strong>in-game scoreboard</strong> recording your name, stages cleared, kills, and timestamp for every session.</p>
+          </div>
+          <div class="feature-card glass-panel" id="feat-6">
+            <div class="feature-icon-wrap">
+              <div class="feature-icon">📱</div>
+            </div>
             <h3 class="feature-title">Cross-Platform</h3>
-            <p class="feature-desc">Full keyboard support for desktop and intuitive on-screen touch D-Pad and action buttons for mobile gamers.</p>
+            <p class="feature-desc">Full <strong>keyboard &amp; mouse</strong> support on desktop and intuitive <strong>on-screen D-Pad + action buttons</strong> for mobile touch gameplay.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Character Roster -->
+    <!-- ===== ROSTER SECTION ===== -->
     <section id="roster" class="roster-section section-padding">
       <div class="container fade-in">
-        <h2 class="section-heading">CHOOSE YOUR <span class="highlight">HERO</span></h2>
+        <div class="section-label">CHOOSE YOUR FIGHTER</div>
+        <h2 class="section-heading">SHADOW <span class="highlight">WARRIORS</span></h2>
+        <p class="section-sub">Five elite warriors forged in darkness. Each with unique skills, speed, and combat style. Who will you unleash?</p>
+        
         <div class="roster-showcase">
-          <!-- Character Nav -->
+          <!-- Hero Tabs -->
           <div class="roster-list">
-            <button class="roster-btn active" data-hero="p1">DEFAULT FIGHTER</button>
-            <button class="roster-btn" data-hero="dd">NARUTO UZUMAKI</button>
-            <button class="roster-btn" data-hero="haratu">HARATU</button>
-            <button class="roster-btn" data-hero="luffy">LUFFY</button>
+            <button class="roster-btn active" data-hero="hero1" id="rbtn-1">
+              <span class="roster-num">01</span>
+              <span class="roster-btn-name">SHADOW WARRIOR I</span>
+              <span class="roster-arrow">→</span>
+            </button>
+            <button class="roster-btn" data-hero="hero2" id="rbtn-2">
+              <span class="roster-num">02</span>
+              <span class="roster-btn-name">SHADOW WARRIOR II</span>
+              <span class="roster-arrow">→</span>
+            </button>
+            <button class="roster-btn" data-hero="hero3" id="rbtn-3">
+              <span class="roster-num">03</span>
+              <span class="roster-btn-name">SHADOW WARRIOR III</span>
+              <span class="roster-arrow">→</span>
+            </button>
+            <button class="roster-btn" data-hero="hero4" id="rbtn-4">
+              <span class="roster-num">04</span>
+              <span class="roster-btn-name">SHADOW WARRIOR IV</span>
+              <span class="roster-arrow">→</span>
+            </button>
+            <button class="roster-btn" data-hero="hero5" id="rbtn-5">
+              <span class="roster-num">05</span>
+              <span class="roster-btn-name">SHADOW WARRIOR V</span>
+              <span class="roster-arrow">→</span>
+            </button>
           </div>
-          <!-- Character Display -->
+
+          <!-- Hero Display -->
           <div class="roster-display">
-            <div class="roster-card glass-panel fade-in-fast" id="roster-card">
-              <img src="/assets/characters/p1.png" alt="Default Fighter" id="roster-img" class="roster-img">
+            <div class="roster-card glass-panel" id="roster-card">
+              <div class="roster-video-wrap">
+                <video autoplay muted loop playsinline class="roster-video" id="roster-video">
+                  <source src="/assets/hero/hero1.mp4" type="video/mp4">
+                </video>
+                <div class="roster-video-mask"></div>
+              </div>
               <div class="roster-info">
-                <h3 id="roster-name" class="roster-name">Default Fighter</h3>
-                <p id="roster-desc" class="roster-desc">The standard combatant balanced for all play styles. Master the basics before venturing further.</p>
+                <div class="roster-badge" id="roster-badge">WARRIOR 01</div>
+                <h3 id="roster-name" class="roster-name">SHADOW WARRIOR I</h3>
+                <p id="roster-desc" class="roster-desc">A master of deception and speed. This warrior combines fluid movement with devastating strikes, making them the perfect choice for aggressive, in-your-face combat.</p>
+                <div class="roster-stats" id="roster-stats">
+                  <div class="rstat">
+                    <span class="rstat-label">SPEED</span>
+                    <div class="rstat-bar"><div class="rstat-fill" style="width:80%"></div></div>
+                  </div>
+                  <div class="rstat">
+                    <span class="rstat-label">POWER</span>
+                    <div class="rstat-bar"><div class="rstat-fill" style="width:65%"></div></div>
+                  </div>
+                  <div class="rstat">
+                    <span class="rstat-label">DEFENSE</span>
+                    <div class="rstat-bar"><div class="rstat-fill" style="width:55%"></div></div>
+                  </div>
+                </div>
+                <a href="game.html" class="btn-primary roster-play-btn">⚔️ PLAY AS THIS HERO</a>
               </div>
             </div>
           </div>
@@ -125,49 +221,84 @@
       </div>
     </section>
 
-    <!-- Weapon Selection -->
+    <!-- ===== WEAPONS SECTION ===== -->
     <section id="weapons" class="weapons-section section-padding">
       <div class="container fade-in">
-        <h2 class="section-heading">SELECT YOUR <span class="highlight">BLADE</span></h2>
+        <div class="section-label">CHOOSE YOUR BLADE</div>
+        <h2 class="section-heading">SELECT YOUR <span class="highlight">WEAPON</span></h2>
+        <p class="section-sub">Four legendary blades. Each weapon reshapes your combat style and hitbox. Choose wisely.</p>
         <div class="weapons-grid">
-          <div class="weapon-card glass-panel">
+          <div class="weapon-card glass-panel active" id="wcard-1" data-weapon="Light Blade" data-desc="Fast, lightweight sword ideal for rapid combos. Low damage per hit but exceptional attack speed.">
+            <div class="weapon-glow"></div>
             <img src="/assets/sword/sword1.png" alt="Light Blade" class="weapon-img">
             <h4 class="weapon-name">Light Blade</h4>
+            <span class="weapon-tag">⚡ Fast</span>
           </div>
-          <div class="weapon-card glass-panel active">
-            <img src="/assets/sword/sword2.png" alt="Heavy Blade" class="weapon-img shadow-glow">
+          <div class="weapon-card glass-panel" id="wcard-2" data-weapon="Heavy Blade" data-desc="Powerful broadsword that deals massive damage per swing. Slower but can break through enemy shields.">
+            <div class="weapon-glow"></div>
+            <img src="/assets/sword/sword2.png" alt="Heavy Blade" class="weapon-img">
             <h4 class="weapon-name">Heavy Blade</h4>
+            <span class="weapon-tag">💪 Power</span>
           </div>
-          <div class="weapon-card glass-panel">
+          <div class="weapon-card glass-panel" id="wcard-3" data-weapon="Dragon Slayer" data-desc="An enormous, ancient blade infused with dragon energy. Long reach and AoE potential. Legendary tier.">
+            <div class="weapon-glow"></div>
             <img src="/assets/sword/sword3.png" alt="Dragon Slayer" class="weapon-img">
             <h4 class="weapon-name">Dragon Slayer</h4>
+            <span class="weapon-tag">🐉 Legendary</span>
           </div>
-          <div class="weapon-card glass-panel">
+          <div class="weapon-card glass-panel" id="wcard-4" data-weapon="Volt Blade" data-desc="An electrified blade that delivers lightning-fast slashes with electric DOT. Stuns enemies briefly on hit.">
+            <div class="weapon-glow"></div>
             <img src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" alt="Volt Blade" class="weapon-img">
             <h4 class="weapon-name">Volt Blade</h4>
+            <span class="weapon-tag">⚡ Electric</span>
           </div>
+        </div>
+        <!-- Weapon Info Panel -->
+        <div class="weapon-info-panel glass-panel" id="weapon-info">
+          <span class="weapon-info-name" id="winfo-name">Light Blade</span>
+          <p class="weapon-info-desc" id="winfo-desc">Fast, lightweight sword ideal for rapid combos. Low damage per hit but exceptional attack speed.</p>
         </div>
       </div>
     </section>
 
-    <!-- Controls Section -->
+    <!-- ===== HOW TO PLAY ===== -->
     <section id="controls" class="controls-section section-padding">
       <div class="container fade-in">
+        <div class="section-label">TUTORIAL</div>
         <h2 class="section-heading">HOW TO <span class="highlight">PLAY</span></h2>
-        
         <div class="controls-container glass-panel">
           
           <div class="controls-platform">
             <h3 class="platform-title">💻 DESKTOP (KEYBOARD)</h3>
             <ul class="key-list">
-              <li><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> <span class="key-label">Movement / Jump</span></li>
-              <li><span class="key wide-key">SPACE</span> <span class="key-label">Basic Attack</span></li>
-              <li><span class="key">K</span> <span class="key-label">Sword Strike</span></li>
-              <li><span class="key">S</span> <span class="key-label">Shield / Block</span></li>
-              <li><span class="key">Q</span> <span class="key-label">Ultimate Skill</span></li>
+              <li>
+                <div class="key-group">
+                  <span class="key">W</span>
+                  <span class="key">A</span>
+                  <span class="key">S</span>
+                  <span class="key">D</span>
+                </div>
+                <span class="key-label">Move / Jump</span>
+              </li>
+              <li>
+                <div class="key-group"><span class="key wide-key">SPACE</span></div>
+                <span class="key-label">Basic Attack</span>
+              </li>
+              <li>
+                <div class="key-group"><span class="key">K</span></div>
+                <span class="key-label">Sword Strike</span>
+              </li>
+              <li>
+                <div class="key-group"><span class="key">S</span></div>
+                <span class="key-label">Shield / Block</span>
+              </li>
+              <li>
+                <div class="key-group"><span class="key">Q</span></div>
+                <span class="key-label">Ultimate Skill</span>
+              </li>
             </ul>
           </div>
-          
+
           <div class="controls-divider"></div>
 
           <div class="controls-platform">
@@ -178,46 +309,53 @@
                 <div class="dbtn left">←</div>
                 <div class="dbtn right">→</div>
               </div>
+              <div class="mobile-center-tip">TAP TO<br>MOVE</div>
               <div class="mockup-actions">
-                <div class="abtn">⚔️</div>
-                <div class="abtn">🛡️</div>
-                <div class="abtn special">✨</div>
-                <div class="abtn attack">👊</div>
+                <div class="abtn">⚔️<span>Sword</span></div>
+                <div class="abtn">🛡️<span>Block</span></div>
+                <div class="abtn special">✨<span>Skill</span></div>
+                <div class="abtn attack">👊<span>Attack</span></div>
               </div>
             </div>
-            <p class="mobile-info">Intuitive on-screen D-Pad and Action buttons appear automatically on touch devices.</p>
+            <p class="mobile-info">On-screen controls appear automatically on touch devices. No download required.</p>
           </div>
 
         </div>
       </div>
     </section>
 
-    <!-- Pre-Footer CTA -->
-    <section class="cta-section section-padding">
-      <div class="container fade-in">
-        <h2 class="cta-title">THE ARENA AWAITS</h2>
-        <a href="game.html" class="btn-primary glow-effect massive-btn">ENTER MATCH</a>
+    <!-- ===== CTA SECTION ===== -->
+    <section class="cta-section">
+      <div class="cta-bg-overlay"></div>
+      <div class="container fade-in cta-content">
+        <div class="section-label">READY?</div>
+        <h2 class="cta-title">THE ARENA<br><span class="highlight">AWAITS YOU</span></h2>
+        <p class="cta-sub">No download. No install. Pure browser-based combat. Start fighting in seconds.</p>
+        <a href="game.html" class="btn-primary glow-effect massive-btn" id="cta-play-bottom">⚔️ ENTER THE ARENA</a>
       </div>
     </section>
-
   </main>
 
-  <!-- Footer -->
+  <!-- ===== FOOTER ===== -->
   <footer class="footer">
     <div class="footer-container">
       <div class="footer-brand">
         <h3>Fighter<span class="highlight">Game</span></h3>
-        <p>An intense 2D browser battling experience.</p>
+        <p>Intense 2D browser combat. No download needed.</p>
       </div>
       <div class="footer-links">
         <a href="#features">Features</a>
         <a href="#roster">Roster</a>
+        <a href="#weapons">Weapons</a>
+        <a href="#controls">Controls</a>
+      </div>
+      <div class="footer-legal">
         <a href="#">Privacy Policy</a>
         <a href="#">Terms of Service</a>
       </div>
     </div>
     <div class="footer-bottom">
-      &copy; 2026 Fighter Game. All rights reserved.
+      &copy; 2026 FighterGame. All rights reserved. &nbsp;|&nbsp; Built with ❤️ for arena warriors.
     </div>
   </footer>
 

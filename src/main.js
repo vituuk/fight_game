@@ -1028,6 +1028,11 @@ let unlockedStageIdx = 0;
 let currentWaveIdx  = 0;
 let gameActive      = true;  // false while transitioning
 
+// ─── Score Tracking ──────────────────────────────────────────────────────────
+let _scoreKills     = 0;   // enemies defeated this session
+let _scoreTime      = 0;   // time survived (seconds used)
+let _scoreRoundStart = Date.now(); // timestamp when round begins
+
 // Pre-load all background images so transitions are instant
 const bgImages = {};
 BACKGROUNDS.forEach(s => {
@@ -1717,6 +1722,136 @@ const gameOverTitle  = document.getElementById('game-over-title');
 const gameOverSub    = document.getElementById('game-over-sub');
 const retryBtn       = document.getElementById('btn-retry');
 const btnStageSelect = document.getElementById('btn-stage-select');
+const scorePanelEl   = document.getElementById('score-list-panel');
+
+// ─── Score System ─────────────────────────────────────────────────────────────
+const SCORE_KEY  = 'fightgame_scores_v2';  // v2 adds player name field
+const MAX_SCORES = 10;    // keep top 10 entries
+
+/** Get and persist the current player name */
+function getPlayerName() {
+  const inputEl = document.getElementById('player-name-input');
+  const fromInput = (inputEl && inputEl.value.trim()) || '';
+  if (fromInput) {
+    try { localStorage.setItem('fightgame_player_name', fromInput); } catch {}
+    return fromInput.toUpperCase();
+  }
+  // Fall back to last saved name
+  try {
+    const saved = localStorage.getItem('fightgame_player_name') || '';
+    if (saved) return saved.toUpperCase();
+  } catch {}
+  return 'PLAYER';
+}
+
+/**
+ * Format a timestamp as DD/MM/YYYY HH:MM (always consistent, no locale variance).
+ */
+function formatDate(ts) {
+  const d  = new Date(ts);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+
+/** Load saved scores from localStorage (returns array sorted by score desc) */
+function loadScores() {
+  try {
+    return JSON.parse(localStorage.getItem(SCORE_KEY) || '[]');
+  } catch { return []; }
+}
+
+/** Save a new score entry and return the updated sorted list */
+function saveScore(entry) {
+  const list = loadScores();
+  list.push(entry);
+  list.sort((a, b) => b.score - a.score);
+  const trimmed = list.slice(0, MAX_SCORES);
+  try { localStorage.setItem(SCORE_KEY, JSON.stringify(trimmed)); } catch {}
+  return trimmed;
+}
+
+/**
+ * Compute a numeric score:
+ *  - 500 pts per stage cleared
+ *  - 200 pts per enemy killed
+ *  - 5 pts per second of time remaining
+ *  - Bonus 1000 pts for full-game victory
+ */
+function calcScore(stageIdx, kills, secondsLeft, won) {
+  const stageBonus   = stageIdx * 500;
+  const killBonus    = kills    * 200;
+  const timeBonus    = Math.max(0, secondsLeft) * 5;
+  const victoryBonus = won ? 1000 : 0;
+  return stageBonus + killBonus + timeBonus + victoryBonus;
+}
+
+/** Render the score panel inside #score-list-panel */
+function renderScoreList(highlightIdx = -1) {
+  if (!scorePanelEl) return;
+  const scores = loadScores();
+  if (scores.length === 0) {
+    scorePanelEl.innerHTML = '';
+    return;
+  }
+
+  // ── Labels row (mirrors exact same DOM structure as a data row) ──────────
+  const labels = [
+    `<div class="sl-labels">`,
+      `<span class="sl-rank"></span>`,          // same 24px spacer as medal
+      `<div class="sl-body">`,
+        `<div class="sl-top">`,
+          // `<span class="sl-lbl-name">NAME</span>`,
+          `<span class="sl-lbl-score"></span>`,  // blank — score has no column label
+        `</div>`,
+        `<div class="sl-bottom">`,
+          `<span class="sl-lbl-out"></span>`,    // blank — outcome icon column
+          `<span class="sl-lbl-stage">STAGE</span>`,
+          `<span class="sl-lbl-kill">KILL</span>`,
+          `<span class="sl-lbl-date">DATE</span>`,
+        `</div>`,
+      `</div>`,
+    `</div>`,
+  ].join('');
+
+  // ── Data rows ────────────────────────────────────────────────────────────
+  const rows = scores.map((s, i) => {
+    const isNew   = i === highlightIdx;
+    const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+    const outcome = s.won ? '✅' : '💀';
+    const name    = (s.name || 'PLAYER').toUpperCase();
+    const date    = formatDate(s.ts);
+    return [
+      `<div class="sl-row${isNew ? ' sl-new' : ''}">`,
+        `<span class="sl-rank">${medal}</span>`,
+        `<div class="sl-body">`,
+          // Top line: NAME  ·  SCORE
+          `<div class="sl-top">`,
+            `<span class="sl-name">${name}</span>`,
+            `<span class="sl-score">${s.score.toLocaleString()} pts</span>`,
+          `</div>`,
+          // Bottom line: OUTCOME  ·  STAGE  ·  KILL  ·  DATE
+          `<div class="sl-bottom">`,
+            `<span class="sl-outcome">${outcome}</span>`,
+            `<span class="sl-stage-val">Stage ${s.stage}</span>`,
+            `<span class="sl-kill-val">${s.kills}</span>`,
+            `<span class="sl-date">${date}</span>`,
+          `</div>`,
+        `</div>`,
+      `</div>`,
+    ].join('');
+  }).join('');
+
+  scorePanelEl.innerHTML =
+    `<div class="sl-fixed-top">` +
+      `<div class="sl-header">🏆 BEST SCORES</div>` +
+      labels +
+    `</div>` +
+    rows;
+}
 
 function updateEnemyHUD() {
   // With random enemies, name comes from whoever is fighting not from the stage
@@ -1821,7 +1956,9 @@ function resetRound(omitPlayerPos = false) {
   // Reset wave counter whenever entering a new round (not a wave continuation)
   if (!omitPlayerPos) {
     currentWaveIdx = 0;
+    _scoreKills = 0;               // Reset kill count for new stage
   }
+  _scoreRoundStart = Date.now();   // Reset timer
 
   // --- Player ---
   player.reset();
@@ -1886,11 +2023,9 @@ function resetRound(omitPlayerPos = false) {
   showRoundBanner(currentStageIdx + 1, totalEnemyCount);
 
   // --- HUD ---
-  // Player HP scaling per enemy count (balanced):
-  //   1v1=100, 1v2=110, 1v3=140, 1v4=170, 1v5+=400 (cap)
-  const bonusHp = totalEnemyCount === 1
-    ? 100
-    : Math.min(400, 50 + totalEnemyCount * 30);
+  // Player HP = 100 per enemy (blood scales 1:1 with opponent count)
+  //   1v1 = 100, 1v2 = 200, 1v3 = 300, 1v4 = 400, 1v5 = 500 ...
+  const bonusHp = totalEnemyCount * 100;
   player.health     = bonusHp;
   player._maxHealth = bonusHp;  // used by health bar % calculation
 
@@ -1943,8 +2078,27 @@ function showGameOver() {
   gameOverTitle.textContent = 'GAME OVER';
   gameOverSub.textContent   = 'Defeated at ' + BACKGROUNDS[currentStageIdx].location;
   retryBtn.textContent = '▶ RETRY';
+
+  // Save score — capture player name at the moment of game-over
+  const secondsLeft = countdown;
+  const sc = calcScore(currentStageIdx, _scoreKills, secondsLeft, false);
+  const entry = {
+    name:  getPlayerName(),
+    score: sc,
+    stage: currentStageIdx + 1,
+    kills: _scoreKills,
+    time:  secondsLeft,
+    won:   false,
+    ts:    Date.now()
+  };
+  const updatedList = saveScore(entry);
+  const newIdx = updatedList.findIndex(e => e.ts === entry.ts);
+
   gameOverScreen.classList.remove('hidden');
-  requestAnimationFrame(() => gameOverScreen.classList.add('visible'));
+  requestAnimationFrame(() => {
+    gameOverScreen.classList.add('visible');
+    renderScoreList(newIdx);
+  });
 }
 
 function showVictory() {
@@ -1952,8 +2106,27 @@ function showVictory() {
   gameOverTitle.textContent = '🏆 VICTORY!';
   gameOverSub.textContent   = BACKGROUNDS[currentStageIdx].location + ' — CLEARED!';
   retryBtn.textContent = '▶ PLAY AGAIN';
+
+  // Save score — capture player name at the moment of victory
+  const secondsLeft = countdown;
+  const sc = calcScore(currentStageIdx, _scoreKills, secondsLeft, currentStageIdx === BACKGROUNDS.length - 1);
+  const entry = {
+    name:  getPlayerName(),
+    score: sc,
+    stage: currentStageIdx + 1,
+    kills: _scoreKills,
+    time:  secondsLeft,
+    won:   true,
+    ts:    Date.now()
+  };
+  const updatedList = saveScore(entry);
+  const newIdx = updatedList.findIndex(e => e.ts === entry.ts);
+
   gameOverScreen.classList.remove('hidden');
-  requestAnimationFrame(() => gameOverScreen.classList.add('visible'));
+  requestAnimationFrame(() => {
+    gameOverScreen.classList.add('visible');
+    renderScoreList(newIdx);
+  });
 }
 
 // RETRY: restart same stage 
@@ -1978,9 +2151,14 @@ if (btnStageSelect) {
 }
 
 function handlePlayerWin() {
-  // All stages start at 1 enemy, max = stageIdx + 2
-  // Stage 1: max 2, Stage 2: max 3, Stage 3: max 4, Stage 4: max 5, Stage 5: max 6, Stage 6: max 7
-  const maxEnemiesForStage = currentStageIdx + 2;
+  // Enemy count per stage (waves start at 1 and increment up to the stage number):
+  //   Stage 1: max 1   (only 1 fight)
+  //   Stage 2: max 2   (waves: 1 → 2)
+  //   Stage 3: max 3   (waves: 1 → 2 → 3)
+  //   Stage 4: max 4   (waves: 1 → 2 → 3 → 4)
+  //   Stage 5: max 5   (waves: 1 → 2 → 3 → 4 → 5)
+  //   Stage 6: max 6   (waves: 1 → 2 → 3 → 4 → 5 → 6)
+  const maxEnemiesForStage = currentStageIdx + 1;
   const currentTotal = 1 + currentWaveIdx;
 
   if (currentTotal < maxEnemiesForStage && network.role === NetworkRole.OFFLINE) {
@@ -2186,6 +2364,7 @@ function animate() {
               }
 
               if (network.role === NetworkRole.OFFLINE) {
+                const prevHp = victim.health;
                 victim.takeHit(dmg);
                 if (player._gearKnockback && attacker === player) {
                   const kbDir = attacker.facingRight ? 1 : -1;
@@ -2202,8 +2381,23 @@ function animate() {
                   const maxHp = player._maxHealth || 100;
                   game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
                 } else {
+                  // Track kill when an enemy's HP just reached 0
+                  if (prevHp > 0 && victim.health <= 0) _scoreKills++;
                   updateEnemyHealthHUD();
+
+                  // ── Blood cost: player spends blood to deal damage ──────────
+                  // Hitting an enemy drains the player's own HP (blood price).
+                  // Shielded hits cost nothing — the shield absorbed the blow.
+                  if (attackerIsPlayer && !victim.isShielding) {
+                    const bloodCost = attacker.isSpecialAttacking ? 12
+                                    : attacker.isKnifeAttacking   ? 8
+                                    :                               5;
+                    player.health = Math.max(1, player.health - bloodCost);
+                    const maxHp = player._maxHealth || 100;
+                    game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
+                  }
                 }
+
               } else if (network.role === NetworkRole.HOST) {
                 victim.takeHit(dmg);
                 if (victim === player) game.p1HealthBar.style.width = player.health + '%';
