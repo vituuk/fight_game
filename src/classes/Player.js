@@ -67,7 +67,8 @@ export class Player {
     this.isKnifeAttacking   = false;
     this.isSpecialAttacking = false;
     this.isShielding        = false;
-    this.health             = 100;
+    this.health             = 250;
+    this._maxHealth         = 250;
     this.isDead             = false;
 
     /**
@@ -111,7 +112,8 @@ export class Player {
 
   /** Stand the character back up and clear all temporary states/animations */
   reset() {
-    this.health             = 100;
+    this.health             = 250;
+    this._maxHealth         = 250;
     this.isDead             = false;
     this.isAttacking        = false;
     this.isKnifeAttacking   = false;
@@ -400,13 +402,21 @@ export class Player {
 
         this._videoCtx.clearRect(0, 0, SW, SH);
         this._videoCtx.drawImage(this.img, 0, 0, SW, SH);
+
+        // Throttle BFS to every 2nd frame (~30fps) for performance
+        this._videoBfsFrame = (this._videoBfsFrame || 0) + 1;
+        if (this._videoBfsFrame % 2 !== 0) {
+          // Reuse last processed frame
+          drawSrc = this._videoCropCanvas || this._videoCanvas || this.img;
+        } else {
+
         const id = this._videoCtx.getImageData(0, 0, SW, SH);
         const d  = id.data;
 
-        // ── Step 1: Detect bg color — sample 4 corners, pick most likely BG ────
+        // ── Step 1: Score-based bg color detection (low variance + high brightness) ──
         const samplePatch = (cx, cy) => {
           let sr=0, sg=0, sb=0, cnt=0;
-          const R = 4;
+          const R = 6;
           for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++) {
             const px = Math.min(SW-1, Math.max(0, cx+dx));
             const py = Math.min(SH-1, Math.max(0, cy+dy));
@@ -421,9 +431,9 @@ export class Player {
             const ii = (py*SW+px)*4;
             variance += Math.abs(d[ii]-ar)+Math.abs(d[ii+1]-ag)+Math.abs(d[ii+2]-ab);
           }
-          // Score combined: low variance is GOOD, very bright is usually BG
           const brightness = (ar + ag + ab) / 3;
-          const score = variance - (brightness * 0.5); 
+          // Low variance + high brightness → most likely solid bg corner
+          const score = variance - (brightness * 0.8);
           return { r:ar, g:ag, b:ab, score };
         };
         const patches = [
@@ -433,16 +443,81 @@ export class Player {
         const best = patches.reduce((a, b) => b.score < a.score ? b : a);
         const bgR = best.r, bgG = best.g, bgB = best.b;
 
-        // ── Step 2: Global color match + bounding box ───────────────
-        const thr = 80;
+        // ── Step 2: BFS flood-fill from ALL 4 edges ───────────────────────────
+        const thr = 90;
+        const isBgPixel = (px, py) => {
+          const ii = (py*SW+px)*4;
+          if (d[ii+3] < 30) return true; // already transparent
+          return Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB)) < thr;
+        };
+
+        const visited = new Uint8Array(SW * SH);
+        const queue = [];
+        // Seed from the outer 5 pixels to bypass any 1px video edge artifacts
+        for (let margin = 0; margin < 5; margin++) {
+          for (let x = 0; x < SW; x++) {
+            if (!visited[margin*SW+x] && isBgPixel(x, margin)) { 
+              visited[margin*SW+x] = 1; queue.push(x, margin); 
+            }
+            if (!visited[(SH-1-margin)*SW+x] && isBgPixel(x, SH-1-margin)) { 
+              visited[(SH-1-margin)*SW+x] = 1; queue.push(x, SH-1-margin); 
+            }
+          }
+          for (let y = 0; y < SH; y++) {
+            if (!visited[y*SW+margin] && isBgPixel(margin, y)) { 
+              visited[y*SW+margin] = 1; queue.push(margin, y); 
+            }
+            if (!visited[y*SW+(SW-1-margin)] && isBgPixel(SW-1-margin, y)) { 
+              visited[y*SW+(SW-1-margin)] = 1; queue.push(SW-1-margin, y); 
+            }
+          }
+        }
+
+        let qi = 0;
         let minX = SW, maxX = 0, minY = SH, maxY = 0;
+        while (qi < queue.length) {
+          const qx = queue[qi++], qy = queue[qi++];
+          const ii = (qy*SW+qx)*4;
+          const dist = Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB));
+          // Smooth edge fade rather than hard cut
+          d[ii+3] = dist < thr*0.35 ? 0 : Math.round(d[ii+3]*((dist-thr*0.35)/(thr*0.65)));
+
+          for (const [nx, ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]) {
+            if (nx<0||nx>=SW||ny<0||ny>=SH) continue;
+            const ni = ny*SW+nx;
+            if (!visited[ni] && isBgPixel(nx, ny)) {
+              visited[ni] = 1;
+              queue.push(nx, ny);
+            }
+          }
+        }
+
+        // ── Step 2b: Second pass — remove enclosed near-white pockets ────────
+        // BFS stops at smoke/effect borders leaving white islands inside.
+        // This pass globally removes pixels very close to the bg color,
+        // but ONLY when the bg is bright (hero has white/light background).
+        const bgBright = (bgR + bgG + bgB) / 3;
+        if (bgBright > 170) {
+          const tightThr = 55;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i+3] < 20) continue;
+            const dist2 = Math.max(
+              Math.abs(d[i]   - bgR),
+              Math.abs(d[i+1] - bgG),
+              Math.abs(d[i+2] - bgB)
+            );
+            if (dist2 < tightThr) {
+              d[i+3] = dist2 < tightThr * 0.3
+                ? 0
+                : Math.round(d[i+3] * ((dist2 - tightThr*0.3) / (tightThr*0.7)));
+            }
+          }
+        }
+
+        // Bounding box from non-transparent pixels
         for (let py = 0; py < SH; py++) {
           for (let px = 0; px < SW; px++) {
-            const ii = (py * SW + px) * 4;
-            const dist = Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB));
-            if (dist < thr) {
-              d[ii+3] = dist < thr*0.35 ? 0 : Math.round(d[ii+3]*((dist-thr*0.35)/(thr*0.65)));
-            } else if (d[ii+3] > 10) {
+            if (d[(py*SW+px)*4+3] > 10) {
               if (px < minX) minX = px; if (px > maxX) maxX = px;
               if (py < minY) minY = py; if (py > maxY) maxY = py;
             }
@@ -472,7 +547,8 @@ export class Player {
         } else {
           drawSrc = this._videoCanvas;
         }
-      }
+        } // end else (BFS processing frame)
+      } // end if (this.img.tagName === 'VIDEO')
 
       const nw = drawSrc.naturalWidth  || drawSrc.videoWidth  || drawSrc.width;
       const nh = drawSrc.naturalHeight || drawSrc.videoHeight || drawSrc.height;
@@ -587,76 +663,9 @@ export class Player {
 
     switch (eq) {
 
-          /* ── SWORD ────────────────────────────────────────────── */
+      /* ── SWORD ────────────────────────────────────────────── */
       case 'sword': {
-        if (!this.imgSword.complete || !this.imgSword.naturalWidth) break;
-
-        const SW = 100; // Even smaller for better proportions
-        const SH = SW * (this.imgSword.naturalHeight / this.imgSword.naturalWidth);
-
-        let tx = 28, ty = -this.height * 0.62;
-        let angle = -Math.PI * 0.28;
-        const isActiveAtk = (state === 'punch' || state === 'kick' || state === 'special');
-
-        if (state === 'punch') {
-          const ext = Math.min(f / 5, 1);
-          angle = (-Math.PI * 0.05) + (-Math.PI * 0.05) * ext;
-          tx = 30 + ext * 22;
-        } else if (state === 'kick') {
-          const ext = Math.min(f / 6, 1);
-          angle = -Math.PI * 0.55 + (Math.PI * 0.85) * ext;
-          tx = 32 + ext * 10;
-          ty = -this.height * 0.66 - ext * 8;
-        } else if (state === 'special') {
-          angle = f * -0.5;
-          tx = 18;
-          ty = -this.height * 0.6;
-        } else if (state === 'shield') {
-          angle = Math.PI * 0.42;
-          tx = -16;
-          ty = -this.height * 0.3;
-        } else if (state === 'run') {
-          angle = -Math.PI * 0.22 + Math.sin(t * 3.5) * 0.1;
-          ty = -this.height * 0.58 + Math.abs(Math.sin(t * 3.5)) * 5;
-        } else if (state === 'jump') {
-          angle = -Math.PI * 0.45;
-          ty = -this.height * 0.65;
-        } else if (state === 'hurt') {
-          angle = -Math.PI * 0.6;
-          ty = -this.height * 0.5;
-          tx = 15;
-        } else if (state === 'dead') {
-          angle = Math.PI * 0.3;
-          tx = 20; ty = -this.height * 0.25;
-        } else {
-          angle = -Math.PI * 0.28;
-          ty    = -this.height * 0.62;
-        }
-
-        ctx.save();
-        // shadowBlur only during active attacks — idle has no glow cost
-        if (isActiveAtk) {
-          ctx.shadowColor = '#a0d8ff';
-          ctx.shadowBlur  = 22;
-        }
-
-        let pivotX = SW * 0.12;
-        let pivotY = SH * 0.88;
-        let addedAngle = 0;
-
-        // Customise handle pivot based on the sword image since they are drawn differently
-        if (this.imgSword.src && this.imgSword.src.includes('sword3')) {
-          // The huge blue sword image has the handle at the TOP
-          pivotX = SW * 0.5;
-          pivotY = SH * 0.08; 
-          addedAngle = Math.PI; // Flip it so tip points UP
-        }
-
-
-        ctx.translate(tx, ty);
-        ctx.rotate(angle + addedAngle);
-        ctx.drawImage(this.imgSword, -pivotX, -pivotY, SW, SH);
-        ctx.restore();
+        // Removed: The video heroes already hold their own swords visually.
         break;
       }
 

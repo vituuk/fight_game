@@ -932,8 +932,9 @@ body {
 
 .stage-btn img {
   width: 100%;
-  height: 100%;
+  height: 115%; /* Stretch height to crop the bottom watermark */
   object-fit: cover;
+  object-position: center top;
   display: block;
   pointer-events: none;
 }
@@ -1019,8 +1020,9 @@ body {
 }
 .sso-card img {
   width: 100%;
-  height: 100%;
+  height: 115%; /* Stretch height to crop the bottom watermark */
   object-fit: cover;
+  object-position: center top;
   display: block;
 }
 .sso-card .sso-label {
@@ -1253,3 +1255,124 @@ body {
 .sl-stage-val { flex: 1; font-size: 7px; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl-kill-val  { flex-shrink: 0; width: 28px; text-align: center; font-size: 7px; color: rgba(255,255,255,0.75); }
 
+
+/* ─── Music Control Bar ────────────────────────────────────── */
+#music-bar {
+  position: absolute;
+  top: 65px; /* Under the blood bar */
+  right: 20px; /* Aligned with the health bar's right edge */
+  z-index: 50;
+  display: flex;
+  flex-direction: column; /* Stack vertically */
+  align-items: center;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+/* Order: Music Selector first, Mute second */
+#music-selector {
+  order: 1;
+  position: relative;
+}
+
+/* Shared base for mute + music-toggle buttons */
+#btn-mute,
+#btn-music-toggle {
+  width: 44px;
+  height: 44px;
+  background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
+  padding: 0;
+  order: 2; /* Ensure mute is below music-selector */
+}
+
+/* Specific borders */
+#btn-mute {
+  border: 2px solid #fff;
+  margin-right: -15px;
+}
+
+#btn-mute:hover,
+#btn-music-toggle:hover {
+  transform: scale(1.08);
+  filter: brightness(1.2);
+}
+
+#btn-music-toggle.active-track {
+  border-color: #9b8bf4;
+  box-shadow: 0 0 10px rgba(155, 139, 244, 0.45);
+}
+
+/* Hide SVG parts based on state */
+#btn-mute .mute-slash { display: none; }
+#btn-mute.is-muted .mute-slash { display: block; }
+#btn-mute.is-muted .sound-wave { display: none; }
+
+/* Music selector wrapper */
+#music-selector {
+  position: relative;
+}
+
+/* Pop-up panel */
+#music-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  background: rgba(10,10,26,0.96);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+#music-panel.hidden { display: none; }
+
+.music-panel-title {
+  font-size: 7px;
+  color: #fbc531;
+  letter-spacing: 2px;
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Each track button */
+.music-track-btn {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 7px;
+  color: rgba(255,255,255,0.75);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 9px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.5px;
+}
+.music-track-btn:hover {
+  background: rgba(0,210,211,0.12);
+  border-color: #00d2d3;
+  color: #fff;
+}
+.music-track-btn.active {
+  background: rgba(0,210,211,0.18);
+  border-color: #00d2d3;
+  color: #00d2d3;
+  box-shadow: inset 3px 0 0 #00d2d3;
+}

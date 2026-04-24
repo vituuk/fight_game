@@ -24,21 +24,8 @@
         <div class="hero-options">
 
           <!-- Video heroes: using specific thumbnails (hero1.png ~ hero4.png) -->
-          <img src="/assets/hero/hero1.png" class="hero-btn" data-src="/assets/hero/hero1.mp4" data-name="SHADOW WARRIOR 1" data-video="true" title="Shadow Warrior 1 (Video)">
+          <img src="/assets/hero/hero1.png" class="hero-btn active" data-src="/assets/hero/hero1.mp4" data-name="SHADOW WARRIOR 1" data-video="true" title="Shadow Warrior 1 (Video)">
           <img src="/assets/hero/hero2.png" class="hero-btn" data-src="/assets/hero/hero2.mp4" data-name="SHADOW WARRIOR 2" data-video="true" title="Shadow Warrior 2 (Video)">
-          <img src="/assets/hero/hero3.png" class="hero-btn" data-src="/assets/hero/hero3.mp4" data-name="SHADOW WARRIOR 3" data-video="true" title="Shadow Warrior 3 (Video)">
-          <img src="/assets/hero/hero4.png" class="hero-btn" data-src="/assets/hero/hero4.mp4" data-name="SHADOW WARRIOR 4" data-video="true" title="Shadow Warrior 4 (Video)">
-        </div>
-      </div>
-
-      <!-- LAYER 1.6: Sword Selection -->
-      <div id="sword-selection" class="sword-selection">
-        <span class="hero-label">SWORD:</span>
-        <div class="sword-options">
-          <img src="/assets/sword/sword1.png" class="sword-btn" data-src="/assets/sword/sword1.png" title="Light Blade">
-          <img src="/assets/sword/sword2.png" class="sword-btn active" data-src="/assets/sword/sword2.png" title="Heavy Blade">
-          <img src="/assets/sword/sword3.png" class="sword-btn" data-src="/assets/sword/sword3.png" title="Dragon Slayer">
-          <img src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" class="sword-btn" data-src="/assets/sword/sage-taylor-volt-sword-2-removebg-preview.png" title="Volt Blade">
         </div>
       </div>
 
@@ -150,8 +137,32 @@
         </div>
       </div>
 
-      <!-- Mute button -->
-      <button id="btn-mute" title="Toggle Sound">🔊</button>
+      <!-- Music Control Bar -->
+      <div id="music-bar">
+        <div id="music-selector">
+          <button id="btn-music-toggle" title="Music Track">
+            <!-- Custom Purple Music Note SVG -->
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#9b8bf4" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+          </button>
+          <div id="music-panel" class="hidden">
+            <div class="music-panel-title">🎵 BGM TRACK</div>
+            <button class="music-track-btn active" data-src="procedural" id="mtrack-0">🤖 Default Sound</button>
+            <button class="music-track-btn" data-src="/assets/sound/sound1.mp3" id="mtrack-1">🎵 Sound 1</button>
+          </div>
+        </div>
+
+        <button id="btn-mute" class="" title="Toggle Sound">
+          <!-- Custom Speaker SVG -->
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#fff" stroke="none"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" class="sound-wave"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" class="sound-wave"></path>
+            <line x1="1" y1="1" x2="23" y2="23" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" class="mute-slash"></line>
+          </svg>
+        </button>
+      </div>
 
       <!-- LAYER 6: Touch Controls (absolute, inside game-container, overlays game) -->
       <div id="controls-overlay">

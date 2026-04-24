@@ -1,16 +1,20 @@
 /**
- * sound.js — Procedural Web Audio Engine
- * All sounds synthesised in code. No audio files needed.
+ * sound.js — Procedural Web Audio Engine + MP3 BGM support
  */
 class SoundEngine {
   constructor() {
-    this.ctx      = null;
-    this.master   = null;
-    this.sfxVol   = 2.0;   // MAX loudness for hits and SFX
-    this.musicVol = 1.0;   // Very loud music
-    this.muted    = false;
-    this._bgmOn   = false;
-    this._bgmTimer = null;
+    this.ctx        = null;
+    this.master     = null;
+    this.sfxVol     = 2.0;
+    this.musicVol   = 1.0;
+    this.muted      = false;
+    this._bgmOn     = false;
+    this._bgmTimer  = null;
+
+    // ── MP3 BGM ──────────────────────────────────────
+    this._musicAudio   = null;   // <audio> element for MP3 BGM
+    this._usingMp3     = false;  // true when an MP3 is playing
+    this._currentTrack = null;   // src string of current track
   }
 
   /* ── Init (call on first user gesture) ───────────────────── */
@@ -23,14 +27,68 @@ class SoundEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 1;
     this.master.connect(this.ctx.destination);
-    this._startBGM();
+    // Only start procedural BGM if no MP3 is queued
+    if (!this._usingMp3) this._startBGM();
   }
 
   toggleMute() {
     this.muted = !this.muted;
+    // Mute/unmute procedural engine
     if (this.master)
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 1, this.ctx.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(this.muted ? 0 : 1, this.ctx ? this.ctx.currentTime : 0, 0.05);
+    // Mute/unmute MP3 audio element
+    if (this._musicAudio)
+      this._musicAudio.volume = this.muted ? 0 : 0.6;
     return this.muted;
+  }
+
+  /* ── MP3 BGM Controls ─────────────────────────────────────── */
+
+  /**
+   * Play an MP3 file as background music.
+   * Stops the procedural BGM and any previously playing MP3.
+   * @param {string} src  - path like '/sound/sound1.mp3'
+   */
+  playMusic(src) {
+    // Stop procedural BGM
+    this._bgmOn = false;
+    clearTimeout(this._bgmTimer);
+
+    // If same track already playing, do nothing
+    if (this._currentTrack === src && this._musicAudio && !this._musicAudio.paused) return;
+    this._currentTrack = src;
+
+    // Tear down old audio element
+    if (this._musicAudio) {
+      this._musicAudio.pause();
+      this._musicAudio.src = '';
+    }
+
+    const audio = new Audio(src);
+    audio.loop   = true;
+    audio.volume = this.muted ? 0 : 0.6;
+    this._musicAudio = audio;
+    this._usingMp3   = true;
+
+    // Resume AudioContext if needed (browser policy)
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+
+    audio.play().catch(err => console.warn('BGM play blocked:', err));
+  }
+
+  /**
+   * Stop the current MP3 and restart the procedural BGM.
+   */
+  stopMusic() {
+    if (this._musicAudio) {
+      this._musicAudio.pause();
+      this._musicAudio.src = '';
+      this._musicAudio = null;
+    }
+    this._usingMp3     = false;
+    this._currentTrack = null;
+    // Restart procedural BGM
+    if (this.ctx) this._startBGM();
   }
 
   /* ── Helpers ─────────────────────────────────────────────── */

@@ -1149,7 +1149,7 @@ function randomDistinct(arr, n) {
  * threshold: how far from pure-white (255,255,255) a pixel may be
  * and still be erased.  30 handles off-white JPEG artefacts well.
  */
-function removeWhiteBg(img, threshold = 70) {
+function removeWhiteBg(img, threshold = 90) {
   const oc  = document.createElement('canvas');
   const W = img.naturalWidth  || img.width;
   const H = img.naturalHeight || img.height;
@@ -1162,18 +1162,35 @@ function removeWhiteBg(img, threshold = 70) {
   const id = ctx.getImageData(0, 0, W, H);
   const d  = id.data;
 
-  // ── 1. Helper to sample a 5x5 patch ──────────────────────────────────────
+  // ── 1. Score-based corner sampling: low variance + high brightness = bg ──
+  // "Most opaque" doesn't work for JPEG (all alpha=255). Instead, pick the
+  // corner patch that is most uniform AND brightest — that's the background.
   const samplePatch = (cx, cy) => {
     let r=0, g=0, b=0, a=0, cnt=0;
-    for(let dy=-2; dy<=2; dy++) {
-      for(let dx=-2; dx<=2; dx++) {
+    const R = 6;
+    for (let dy=-R; dy<=R; dy++) {
+      for (let dx=-R; dx<=R; dx++) {
         const x = Math.min(W-1, Math.max(0, cx+dx));
         const y = Math.min(H-1, Math.max(0, cy+dy));
         const i = (y*W+x)*4;
         r+=d[i]; g+=d[i+1]; b+=d[i+2]; a+=d[i+3]; cnt++;
       }
     }
-    return { r:r/cnt, g:g/cnt, b:b/cnt, a:a/cnt };
+    const ar=r/cnt, ag=g/cnt, ab=b/cnt;
+    // Measure variance within patch
+    let variance = 0;
+    for (let dy=-R; dy<=R; dy++) {
+      for (let dx=-R; dx<=R; dx++) {
+        const x = Math.min(W-1, Math.max(0, cx+dx));
+        const y = Math.min(H-1, Math.max(0, cy+dy));
+        const i = (y*W+x)*4;
+        variance += Math.abs(d[i]-ar)+Math.abs(d[i+1]-ag)+Math.abs(d[i+2]-ab);
+      }
+    }
+    const brightness = (ar + ag + ab) / 3;
+    // Low variance + high brightness = most likely solid background
+    const score = variance - (brightness * 0.8);
+    return { r:ar, g:ag, b:ab, a:a/cnt, score };
   };
 
   const corners = [
@@ -1181,11 +1198,11 @@ function removeWhiteBg(img, threshold = 70) {
     samplePatch(0, H-1), samplePatch(W-1, H-1)
   ];
 
-  // If ALL corners are mostly transparent → skip
+  // If ALL corners are mostly transparent → already bg-free, skip
   if (Math.max(...corners.map(c=>c.a)) < 50) return oc;
 
-  // Use the most opaque corner as bg reference
-  const bg = corners.reduce((best, c) => c.a > best.a ? c : best);
+  // Pick the corner most likely to be the background (lowest score)
+  const bg  = corners.reduce((best, c) => c.score < best.score ? c : best);
   const bgR = bg.r, bgG = bg.g, bgB = bg.b;
 
   // ── 2. BFS flood-fill from all 4 edges ───────────────────────────────────
@@ -1197,13 +1214,23 @@ function removeWhiteBg(img, threshold = 70) {
 
   const visited = new Uint8Array(W * H);
   const queue = [];
-  for (let x=0; x<W; x++) {
-    if (isBg(x, 0))    { visited[x] = 1; queue.push(x, 0); }
-    if (isBg(x, H-1))  { visited[(H-1)*W+x] = 1; queue.push(x, H-1); }
-  }
-  for (let y=1; y<H-1; y++) {
-    if (isBg(0, y))    { visited[y*W] = 1; queue.push(0, y); }
-    if (isBg(W-1, y))  { visited[y*W+W-1] = 1; queue.push(W-1, y); }
+  for (let margin = 0; margin < 5; margin++) {
+    for (let x=0; x<W; x++) {
+      if (!visited[margin*W+x] && isBg(x, margin)) { 
+        visited[margin*W+x] = 1; queue.push(x, margin); 
+      }
+      if (!visited[(H-1-margin)*W+x] && isBg(x, H-1-margin)) { 
+        visited[(H-1-margin)*W+x] = 1; queue.push(x, H-1-margin); 
+      }
+    }
+    for (let y=0; y<H; y++) {
+      if (!visited[y*W+margin] && isBg(margin, y)) { 
+        visited[y*W+margin] = 1; queue.push(margin, y); 
+      }
+      if (!visited[y*W+(W-1-margin)] && isBg(W-1-margin, y)) { 
+        visited[y*W+(W-1-margin)] = 1; queue.push(W-1-margin, y); 
+      }
+    }
   }
 
   let qi = 0;
@@ -1224,6 +1251,31 @@ function removeWhiteBg(img, threshold = 70) {
   }
 
   ctx.putImageData(id, 0, 0);
+
+  // ── 3. Second pass: remove enclosed near-bg pockets ─────────────────────
+  // BFS stops at smoke/effect borders leaving bg-colored islands inside.
+  // Only run when the detected bg is bright (white/light hero backgrounds).
+  const bgBrightness = (bgR + bgG + bgB) / 3;
+  if (bgBrightness > 170) {
+    const tightThr = 55;
+    const id2 = ctx.getImageData(0, 0, W, H);
+    const d2  = id2.data;
+    for (let i = 0; i < d2.length; i += 4) {
+      if (d2[i+3] < 20) continue;
+      const dist = Math.max(
+        Math.abs(d2[i]   - bgR),
+        Math.abs(d2[i+1] - bgG),
+        Math.abs(d2[i+2] - bgB)
+      );
+      if (dist < tightThr) {
+        d2[i+3] = dist < tightThr * 0.3
+          ? 0
+          : Math.round(d2[i+3] * ((dist - tightThr*0.3) / (tightThr*0.7)));
+      }
+    }
+    ctx.putImageData(id2, 0, 0);
+  }
+
   return oc;
 }
 
@@ -1244,7 +1296,12 @@ function drawBackground() {
   const img   = bgImages[stage.bgSrc];
 
   if (img && img.complete && img.naturalWidth > 0) {
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Crop the bottom 12% of the image to remove baked-in watermarks (like resolution text)
+    const sx = 0;
+    const sy = 0;
+    const sWidth = img.naturalWidth;
+    const sHeight = img.naturalHeight * 0.88; 
+    ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
 
     // Subtle vignette so characters stay readable on any background
     const vig = ctx.createRadialGradient(
@@ -1868,13 +1925,13 @@ function updateEnemyHealthHUD() {
   if (!p2Bar || isOnline) return;
 
   // OFFLINE: Multi-enemy health bar logic
-  let totalMax = 100; // Main enemy
+  let totalMax = enemy._maxHealth || 250; // Main enemy
   let totalCur = Math.max(0, enemy.health);
   let activeCount = 1;
 
   enemyPool.forEach(e => {
     if (!e.isHidden) {
-      totalMax += 100;
+      totalMax += e._maxHealth || 250;
       totalCur += Math.max(0, e.health);
       activeCount++;
     }
@@ -1987,6 +2044,16 @@ function resetRound(omitPlayerPos = false) {
   const mainEnemy = chosenEnemies[0];
 
   enemy.reset();
+  
+  // Set enemy HP dynamically based on crowd size to balance difficulty
+  let enemyHp = 250;
+  if (totalEnemyCount === 2) enemyHp = 190;
+  else if (totalEnemyCount === 3) enemyHp = 170;
+  else if (totalEnemyCount === 4) enemyHp = 160;
+  else if (totalEnemyCount >= 5) enemyHp = 150;
+  enemy.health = enemyHp;
+  enemy._maxHealth = enemyHp;
+  
   if (network.role === NetworkRole.CLIENT) {
     enemy.position.x = 80;
     enemy.facingRight = true;
@@ -2005,6 +2072,8 @@ function resetRound(omitPlayerPos = false) {
     if (i < activeExtraCount) {
       const extraEnemy = chosenEnemies[i + 1];
       e.isHidden          = false;
+      e.health            = enemyHp;
+      e._maxHealth        = enemyHp;
       e.position.x        = EXTRA_ENEMY_SPAWN_X[i];
       e.position.y        = -250 - (i * 80); // Staggered Sky Drop for multiple enemies
       e.facingRight       = false;
@@ -2023,11 +2092,9 @@ function resetRound(omitPlayerPos = false) {
   showRoundBanner(currentStageIdx + 1, totalEnemyCount);
 
   // --- HUD ---
-  // Player HP = 100 per enemy (blood scales 1:1 with opponent count)
-  //   1v1 = 100, 1v2 = 200, 1v3 = 300, 1v4 = 400, 1v5 = 500 ...
-  const bonusHp = totalEnemyCount * 100;
-  player.health     = bonusHp;
-  player._maxHealth = bonusHp;  // used by health bar % calculation
+  // Player HP is locked at 250 (does not scale with enemy count)
+  player.health     = 250;
+  player._maxHealth = 250;
 
   game.p1HealthBar.style.width   = '100%';
   game.displayText.style.display = 'none';
@@ -2285,7 +2352,7 @@ function animate() {
     if (p === player || p.isDead) return;
     const cx  = p.position.x + (p.width  || 60) / 2;
     const barW = 70, barH = 6;
-    const hpRatio = Math.max(0, (p.health || 0) / 100);
+    const hpRatio = Math.max(0, (p.health || 0) / (p._maxHealth || 250));
     const fx = cx - barW / 2;
     const fy = p.position.y - 24;
     // name
@@ -2377,8 +2444,8 @@ function animate() {
                 else                      Sound.playPunch();
                 
                 if (victim === player) {
-                  // FIX: percentage of maxHealth (player can have >100 HP with bonus)
-                  const maxHp = player._maxHealth || 100;
+                  // FIX: percentage of maxHealth (player can have >250 HP with bonus)
+                  const maxHp = player._maxHealth || 250;
                   game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
                 } else {
                   // Track kill when an enemy's HP just reached 0
@@ -2393,17 +2460,21 @@ function animate() {
                                     : attacker.isKnifeAttacking   ? 8
                                     :                               5;
                     player.health = Math.max(1, player.health - bloodCost);
-                    const maxHp = player._maxHealth || 100;
+                    const maxHp = player._maxHealth || 250;
                     game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
                   }
                 }
 
               } else if (network.role === NetworkRole.HOST) {
                 victim.takeHit(dmg);
-                if (victim === player) game.p1HealthBar.style.width = player.health + '%';
+                if (victim === player) {
+                  const maxHp = player._maxHealth || 250;
+                  game.p1HealthBar.style.width = Math.max(0, (player.health / maxHp) * 100) + '%';
+                }
                 const firstId = Object.keys(remotePlayers)[0];
                 if (firstId && victim === remotePlayers[firstId]) {
-                  game.p2HealthBar.style.width = victim.health + '%';
+                  const vMaxHp = victim._maxHealth || 250;
+                  game.p2HealthBar.style.width = Math.max(0, (victim.health / vMaxHp) * 100) + '%';
                 }
               } else if (network.role === NetworkRole.CLIENT && attacker === player) {
                 network.send({ type: 'hit_report', dmg });
@@ -2614,13 +2685,64 @@ btn('btn-kick',    () => { if (!player.isDead && !window.isHeroPopupActive) { se
 btn('btn-special', () => { if (!player.isDead && !window.isHeroPopupActive) { useHeroAbility(); } });
 btn('btn-shield',  () => { if (!player.isDead && !window.isHeroPopupActive) { selectSkill('shield'); player.shield(); } }, () => { player.stopShield(); });
 
+// ─── Music Control Bar ────────────────────────────────────────────────────────
+
 // Mute button
 const muteBtn = document.getElementById('btn-mute');
 if (muteBtn) {
   muteBtn.addEventListener('click', () => {
-    Sound.init(); // ensure context started
+    Sound.init();
     const muted = Sound.toggleMute();
-    muteBtn.textContent = muted ? '🔇' : '🔊';
+    if (muted) {
+      muteBtn.classList.add('is-muted');
+    } else {
+      muteBtn.classList.remove('is-muted');
+    }
+  });
+}
+
+// Music panel toggle
+const musicToggleBtn = document.getElementById('btn-music-toggle');
+const musicPanel     = document.getElementById('music-panel');
+
+// Two fixed track buttons
+const proceduralBtn = document.getElementById('mtrack-0');
+const sound1Btn     = document.getElementById('mtrack-1');
+
+function selectMusicTrack(src, clickedBtn) {
+  Sound.init();
+  // Deactivate all
+  document.querySelectorAll('.music-track-btn').forEach(b => b.classList.remove('active'));
+  clickedBtn.classList.add('active');
+
+  if (src === 'procedural') {
+    Sound.stopMusic();
+    if (musicToggleBtn) musicToggleBtn.classList.remove('active-track');
+  } else {
+    Sound.playMusic(src);
+    if (musicToggleBtn) musicToggleBtn.classList.add('active-track');
+  }
+  // Close panel
+  if (musicPanel) musicPanel.classList.add('hidden');
+}
+
+if (proceduralBtn) {
+  proceduralBtn.addEventListener('click', () => selectMusicTrack('procedural', proceduralBtn));
+}
+if (sound1Btn) {
+  sound1Btn.addEventListener('click', () => selectMusicTrack('/assets/sound/sound1.mp3', sound1Btn));
+}
+
+// Toggle panel open/close
+if (musicToggleBtn && musicPanel) {
+  musicToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    musicPanel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!musicPanel.contains(e.target) && e.target !== musicToggleBtn) {
+      musicPanel.classList.add('hidden');
+    }
   });
 }
 
@@ -2681,32 +2803,177 @@ heroBtns.forEach(btn => {
         
         const tempC = document.createElement('canvas');
         const tctx  = tempC.getContext('2d', { willReadFrequently: true });
+        
+        let _previewFrame = 0;
+        let lastCrop = null;
 
         const renderLoop = () => {
           if (stopLoop) return;
+          _previewFrame++;
           if (v.readyState >= 2) {
             if (tempC.width !== v.videoWidth) {
               tempC.width = v.videoWidth; tempC.height = v.videoHeight;
             }
-            tctx.drawImage(v, 0, 0);
-            const id = tctx.getImageData(0, 0, tempC.width, tempC.height);
-            const d  = id.data;
-            // Simple fast chroma-key for preview (Sample top-left)
-            const br = d[0], bg = d[1], bb = d[2];
-            for (let i=0; i<d.length; i+=4) {
-              const diff = Math.max(Math.abs(d[i]-br), Math.abs(d[i+1]-bg), Math.abs(d[i+2]-bb));
-              if (diff < 70) d[i+3] = 0;
+            // Process every 2nd frame for performance, like in Player.js
+            if (_previewFrame % 2 !== 0 && lastCrop) {
+              pctx.clearRect(0, 0, 300, 300);
+              pctx.drawImage(lastCrop, 0, 0, lastCrop.width, lastCrop.height, lastCrop.dx, lastCrop.dy, lastCrop.dw, lastCrop.dh);
+            } else {
+              tctx.drawImage(v, 0, 0);
+              const VW = tempC.width, VH = tempC.height;
+              const id = tctx.getImageData(0, 0, VW, VH);
+              const d = id.data;
+              
+              // 1. Score-based bg color detection
+              const samplePatch = (cx, cy) => {
+                let sr=0, sg=0, sb=0, cnt=0;
+                const R = 6;
+                for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++) {
+                  const px = Math.min(VW-1, Math.max(0, cx+dx));
+                  const py = Math.min(VH-1, Math.max(0, cy+dy));
+                  const ii = (py*VW+px)*4;
+                  sr+=d[ii]; sg+=d[ii+1]; sb+=d[ii+2]; cnt++;
+                }
+                const ar=sr/cnt, ag=sg/cnt, ab=sb/cnt;
+                let variance = 0;
+                for (let dy=-R; dy<=R; dy++) for (let dx=-R; dx<=R; dx++) {
+                  const px = Math.min(VW-1, Math.max(0, cx+dx));
+                  const py = Math.min(VH-1, Math.max(0, cy+dy));
+                  const ii = (py*VW+px)*4;
+                  variance += Math.abs(d[ii]-ar)+Math.abs(d[ii+1]-ag)+Math.abs(d[ii+2]-ab);
+                }
+                const brightness = (ar + ag + ab) / 3;
+                const score = variance - (brightness * 0.8);
+                return { r:ar, g:ag, b:ab, score };
+              };
+              const patches = [
+                samplePatch(0, 0), samplePatch(VW-1, 0),
+                samplePatch(0, VH-1), samplePatch(VW-1, VH-1)
+              ];
+              const best = patches.reduce((a, b) => b.score < a.score ? b : a);
+              const bgR = best.r, bgG = best.g, bgB = best.b;
+              
+              // 2. BFS flood fill
+              const thr = 90;
+              const isBgPixel = (px, py) => {
+                const ii = (py*VW+px)*4;
+                if (d[ii+3] < 30) return true;
+                return Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB)) < thr;
+              };
+              
+              const visited = new Uint8Array(VW * VH);
+              const queue = [];
+              for (let margin = 0; margin < 5; margin++) {
+                for (let x = 0; x < VW; x++) {
+                  if (!visited[margin*VW+x] && isBgPixel(x, margin)) { 
+                    visited[margin*VW+x] = 1; queue.push(x, margin); 
+                  }
+                  if (!visited[(VH-1-margin)*VW+x] && isBgPixel(x, VH-1-margin)) { 
+                    visited[(VH-1-margin)*VW+x] = 1; queue.push(x, VH-1-margin); 
+                  }
+                }
+                for (let y = 0; y < VH; y++) {
+                  if (!visited[y*VW+margin] && isBgPixel(margin, y)) { 
+                    visited[y*VW+margin] = 1; queue.push(margin, y); 
+                  }
+                  if (!visited[y*VW+(VW-1-margin)] && isBgPixel(VW-1-margin, y)) { 
+                    visited[y*VW+(VW-1-margin)] = 1; queue.push(VW-1-margin, y); 
+                  }
+                }
+              }
+              
+              let qi = 0;
+              while (qi < queue.length) {
+                const qx = queue[qi++], qy = queue[qi++];
+                const ii = (qy*VW+qx)*4;
+                const dist = Math.max(Math.abs(d[ii]-bgR), Math.abs(d[ii+1]-bgG), Math.abs(d[ii+2]-bgB));
+                d[ii+3] = dist < thr*0.35 ? 0 : Math.round(d[ii+3]*((dist-thr*0.35)/(thr*0.65)));
+      
+                for (const [nx, ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]) {
+                  if (nx<0||nx>=VW||ny<0||ny>=VH) continue;
+                  const ni = ny*VW+nx;
+                  if (!visited[ni] && isBgPixel(nx, ny)) {
+                    visited[ni] = 1;
+                    queue.push(nx, ny);
+                  }
+                }
+              }
+              
+              // 3. Second pass
+              const bgBright = (bgR + bgG + bgB) / 3;
+              if (bgBright > 170) {
+                const tightThr = 55;
+                for (let i = 0; i < d.length; i += 4) {
+                  if (d[i+3] < 20) continue;
+                  const dist2 = Math.max(
+                    Math.abs(d[i]   - bgR),
+                    Math.abs(d[i+1] - bgG),
+                    Math.abs(d[i+2] - bgB)
+                  );
+                  if (dist2 < tightThr) {
+                    d[i+3] = dist2 < tightThr * 0.3
+                      ? 0
+                      : Math.round(d[i+3] * ((dist2 - tightThr*0.3) / (tightThr*0.7)));
+                  }
+                }
+              }
+              
+              tctx.putImageData(id, 0, 0);
+              
+              // Crop and center
+              pctx.clearRect(0, 0, 300, 300);
+              let minX = VW, maxX = 0, minY = VH, maxY = 0;
+              for (let py = 0; py < VH; py++) {
+                for (let px = 0; px < VW; px++) {
+                  if (d[(py*VW+px)*4+3] > 10) {
+                    if (px < minX) minX = px; if (px > maxX) maxX = px;
+                    if (py < minY) minY = py; if (py > maxY) maxY = py;
+                  }
+                }
+              }
+              
+              let cropData = { canvas: tempC, x: 0, y: 0, w: VW, h: VH, width: tempC.width, height: tempC.height };
+
+              if (maxX > minX && maxY > minY) {
+                const pad = 8;
+                const cx = Math.max(0, minX - pad);
+                const cy = Math.max(0, minY - pad);
+                const cw = Math.min(VW, maxX + pad + 1) - cx;
+                const ch = Math.min(VH, maxY + pad + 1) - cy;
+                const aspect = cw / ch;
+                let dw = 300, dh = 300;
+                if (aspect > 1) { dh = Math.round(300 / aspect); }
+                else            { dw = Math.round(300 * aspect); }
+                const dx = (300 - dw) / 2, dy = (300 - dh) / 2;
+                
+                const cropC = document.createElement('canvas');
+                cropC.width = cw; cropC.height = ch;
+                cropC.getContext('2d').drawImage(tempC, cx, cy, cw, ch, 0, 0, cw, ch);
+                
+                lastCrop = cropC;
+                lastCrop.dx = dx; lastCrop.dy = dy; lastCrop.dw = dw; lastCrop.dh = dh;
+                
+                pctx.drawImage(cropC, 0, 0, cw, ch, dx, dy, dw, dh);
+              } else {
+                lastCrop = tempC;
+                lastCrop.dx = 0; lastCrop.dy = 0; lastCrop.dw = 300; lastCrop.dh = 300;
+                pctx.drawImage(tempC, 0, 0, VW, VH, 0, 0, 300, 300);
+              }
             }
-            tctx.putImageData(id, 0, 0);
-            pctx.clearRect(0,0,300,300);
-            pctx.drawImage(tempC, 0, 0, tempC.width, tempC.height, 0, 0, 300, 300);
           }
           requestAnimationFrame(renderLoop);
         };
         renderLoop();
       } else {
         loadEnemyImg(newSrc).then(canvas => {
-          pctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 300, 300);
+          if (stopLoop) return;
+          pctx.clearRect(0, 0, 300, 300);
+          const aspect = canvas.width / canvas.height;
+          let dw = 300, dh = 300;
+          if (aspect > 1) { dh = Math.round(300 / aspect); }
+          else            { dw = Math.round(300 * aspect); }
+          const dx = (300 - dw) / 2, dy = (300 - dh) / 2;
+          pctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, dx, dy, dw, dh);
         });
       }
 
