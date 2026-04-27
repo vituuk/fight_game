@@ -58,40 +58,14 @@ document.addEventListener('DOMContentLoaded', () => {
       video:  '/assets/hero/hero2.mp4',
       img:    '/assets/hero/hero2.png',
       stats:  { speed: 55, power: 92, defense: 70 }
-    },
-    hero3: {
-      badge:  'WARRIOR 03',
-      name:   'SHADOW WARRIOR III',
-      desc:   'A balanced duelist with precise counters and excellent reach. Masters both offense and defense, adapting to any enemy with calm tactical precision.',
-      video:  '/assets/hero/hero3.mp4',
-      img:    '/assets/hero/hero3.png',
-      stats:  { speed: 70, power: 72, defense: 78 }
-    },
-    hero4: {
-      badge:  'WARRIOR 04',
-      name:   'SHADOW WARRIOR IV',
-      desc:   'An unpredictable whirlwind of chaos. High-risk, high-reward combos and an unmatched ultimate that can wipe the entire screen when fully charged.',
-      video:  '/assets/hero/hero4.mp4',
-      img:    '/assets/hero/hero4.png',
-      stats:  { speed: 90, power: 78, defense: 42 }
-    },
-    hero5: {
-      badge:  'WARRIOR 05',
-      name:   'SHADOW WARRIOR V',
-      desc:   'The most recent recruit, battle-hardened in the darkest arenas. Exceptional defense combined with a skill set that punishes over-aggressive opponents.',
-      video:  '/assets/hero/hero5.mp4',
-      img:    '/assets/hero/hero5.png',
-      stats:  { speed: 65, power: 68, defense: 95 }
     }
   };
-
   const rosterBtns  = document.querySelectorAll('.roster-btn');
   const rosterVideo = document.getElementById('roster-video');
   const rosterCard  = document.getElementById('roster-card');
   const rosterBadge = document.getElementById('roster-badge');
   const rosterName  = document.getElementById('roster-name');
   const rosterDesc  = document.getElementById('roster-desc');
-  const rosterStats = document.getElementById('roster-stats');
 
   // Hero bg switcher
   const heroBgVideo      = document.getElementById('hero-bg-video');
@@ -115,14 +89,6 @@ document.addEventListener('DOMContentLoaded', () => {
     rosterVideo.load();
     rosterVideo.play().catch(() => {});
 
-    // Stat bars
-    rosterStats.innerHTML = ['speed','power','defense'].map(stat =>
-      `<div class="rstat">
-        <span class="rstat-label">${stat.toUpperCase()}</span>
-        <div class="rstat-bar"><div class="rstat-fill" style="width:${d.stats[stat]}%"></div></div>
-      </div>`
-    ).join('');
-
     rosterCard.classList.add('fade-in-fast');
   }
 
@@ -134,19 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ── 5. Weapon Cards ── */
-  const weaponCards = document.querySelectorAll('.weapon-card');
-  const winfoName   = document.getElementById('winfo-name');
-  const winfoDesc   = document.getElementById('winfo-desc');
 
-  weaponCards.forEach(card => {
-    card.addEventListener('click', () => {
-      weaponCards.forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      if (winfoName) winfoName.textContent = card.dataset.weapon || '';
-      if (winfoDesc) winfoDesc.textContent = card.dataset.desc  || '';
-    });
-  });
 
   /* ── 6. Hero section image cycle ── */
   const heroKeys = Object.keys(heroes);

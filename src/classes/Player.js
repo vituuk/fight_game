@@ -106,8 +106,8 @@ export class Player {
     this._afterImageY     = 0;
     this._afterImageFlip  = 1;
 
-    // Screen boundary clamping
-    this.clamping = true;
+    // Screen boundary clamping disabled to allow fighting outside
+    this.clamping = false;
   }
 
   /** Stand the character back up and clear all temporary states/animations */
@@ -132,7 +132,7 @@ export class Player {
     this._stretchActive = false;
     this._afterImageAlpha = 0;
     this.velocity = { x: 0, y: 0 };
-    this.clamping = true;
+    this.clamping = false;
     
     // Clear video hero offscreen canvases if present
     this._videoCanvas     = null;

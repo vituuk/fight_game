@@ -66,7 +66,7 @@ body {
 /* ─── Hero Selection UI (top center, interactive) ─── */
 .hero-selection {
   position: absolute;
-  top: 10px;
+  top: 90px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -79,6 +79,7 @@ body {
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
+
 }
 
 .hero-label {

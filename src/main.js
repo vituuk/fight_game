@@ -1294,6 +1294,7 @@ function loadEnemyImg(src) {
 function drawBackground() {
   const stage = STAGES[currentStageIdx];
   const img   = bgImages[stage.bgSrc];
+  const camX  = window.cameraX || 0;
 
   if (img && img.complete && img.naturalWidth > 0) {
     // Crop the bottom 12% of the image to remove baked-in watermarks (like resolution text)
@@ -1301,17 +1302,31 @@ function drawBackground() {
     const sy = 0;
     const sWidth = img.naturalWidth;
     const sHeight = img.naturalHeight * 0.88; 
-    ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+    
+    const startTile = Math.floor(camX / canvas.width);
+    for (let i = startTile - 1; i <= startTile + 2; i++) {
+      ctx.save();
+      if (Math.abs(i) % 2 === 1) {
+        // Mirror odd tiles to create a seamless reflection
+        ctx.translate((i * canvas.width) + canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+      } else {
+        // Draw even tiles normally
+        ctx.drawImage(img, sx, sy, sWidth, sHeight, i * canvas.width, 0, canvas.width, canvas.height);
+      }
+      ctx.restore();
+    }
 
     // Subtle vignette so characters stay readable on any background
     const vig = ctx.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, canvas.height * 0.18,
-      canvas.width / 2, canvas.height / 2, canvas.height
+      camX + canvas.width / 2, canvas.height / 2, canvas.height * 0.18,
+      camX + canvas.width / 2, canvas.height / 2, canvas.height
     );
     vig.addColorStop(0, 'rgba(0,0,0,0)');
     vig.addColorStop(1, 'rgba(0,0,0,0.48)');
     ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(camX, 0, canvas.width, canvas.height);
   } else {
     // Fallback gradient while images load
     const sky = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.7);
@@ -1319,23 +1334,23 @@ function drawBackground() {
     sky.addColorStop(0.5, '#1a0030');
     sky.addColorStop(1,   '#2d0050');
     ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(camX, 0, canvas.width, canvas.height);
     const grd = ctx.createLinearGradient(0, canvas.height - 96, 0, canvas.height);
     grd.addColorStop(0, '#2a083a');
     grd.addColorStop(1, '#12001f');
     ctx.fillStyle = grd;
-    ctx.fillRect(0, canvas.height - 96, canvas.width, 96);
+    ctx.fillRect(camX, canvas.height - 96, canvas.width, 96);
   }
 
   // Location label (bottom-left strip)
   ctx.save();
   ctx.globalAlpha = 0.62;
   ctx.fillStyle   = '#000';
-  ctx.fillRect(0, canvas.height - 94, 210, 20);
+  ctx.fillRect(camX, canvas.height - 94, 210, 20);
   ctx.globalAlpha = 1;
   ctx.fillStyle   = '#fbc531';
   ctx.font        = '8px "Press Start 2P", cursive';
-  ctx.fillText(stage.location.toUpperCase(), 8, canvas.height - 79);
+  ctx.fillText(stage.location.toUpperCase(), camX + 8, canvas.height - 79);
   ctx.restore();
 }
 
@@ -1782,7 +1797,7 @@ const btnStageSelect = document.getElementById('btn-stage-select');
 const scorePanelEl   = document.getElementById('score-list-panel');
 
 // ─── Score System ─────────────────────────────────────────────────────────────
-const SCORE_KEY  = 'fightgame_scores_v2';  // v2 adds player name field
+const SCORE_KEY  = 'fightgame_scores_v3';  // v3 clears static test data
 const MAX_SCORES = 10;    // keep top 10 entries
 
 /** Get and persist the current player name */
@@ -1817,7 +1832,9 @@ function formatDate(ts) {
 /** Load saved scores from localStorage (returns array sorted by score desc) */
 function loadScores() {
   try {
-    return JSON.parse(localStorage.getItem(SCORE_KEY) || '[]');
+    const scores = JSON.parse(localStorage.getItem(SCORE_KEY) || '[]');
+    // Filter from real playing not static content (e.g. 0 kills and base time score)
+    return scores.filter(s => s.kills > 0 || s.score > 300);
   } catch { return []; }
 }
 
@@ -1861,8 +1878,8 @@ function renderScoreList(highlightIdx = -1) {
       `<span class="sl-rank"></span>`,          // same 24px spacer as medal
       `<div class="sl-body">`,
         `<div class="sl-top">`,
-          // `<span class="sl-lbl-name">NAME</span>`,
-          `<span class="sl-lbl-score"></span>`,  // blank — score has no column label
+          `<span class="sl-lbl-name">NAME</span>`,
+          `<span class="sl-lbl-score">PTS</span>`,
         `</div>`,
         `<div class="sl-bottom">`,
           `<span class="sl-lbl-out"></span>`,    // blank — outcome icon column
@@ -2276,6 +2293,17 @@ function animate() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // --- CAMERA ---
+  if (typeof window.cameraX === 'undefined') window.cameraX = 0;
+  // Smoothly follow the local player
+  if (player && !player.isDead) {
+    const idealCamX = player.position.x + (player.width || 60) / 2 - canvas.width / 2;
+    window.cameraX += (idealCamX - window.cameraX) * 0.08;
+  }
+  
+  ctx.save();
+  ctx.translate(-window.cameraX, 0);
+
   // Background
   drawBackground();
 
@@ -2300,7 +2328,7 @@ function animate() {
     } else if (transitionStep === 'walk-in') {
       if (player.position.x >= 80) {
         player.position.x = 80;
-        player.clamping   = true; // Re-enable clamping for the fight
+        // Clamping remains disabled for unlimited walking
         isTransitioning   = false;
         gameActive        = true;
         transitionStep    = 'none';
@@ -2558,6 +2586,8 @@ function animate() {
     }
     // CLIENT stage advancement driven by host_sync stageIdx (see handler below)
   }
+
+  ctx.restore(); // Restore camera translation before UI/Network logic
 
   // ── Network Broadcast ────────────────────────────────────────────────────
   if (network.role !== NetworkRole.OFFLINE) {
